@@ -115,7 +115,15 @@ class MessageHandler {
                 return await this.procesarDatosTelefono(from, mensaje);
                 
             case 'esperando_voucher':
-                return await this.procesarVoucher(from, mensaje, mediaUrl);
+                // Si hay mediaUrl (imagen), procesarla como voucher
+                if (mediaUrl) {
+                    return await this.procesarVoucher(from, mensaje, mediaUrl);
+                }
+                // Si no hay imagen, informar que se necesita
+                return await whatsappService.sendMessage(from,
+                    '📸 Por favor, envia la imagen de tu comprobante de pago.\n\n' +
+                    'Codigo de pedido: ' + (session.data?.pedidoId || 'N/A')
+                );
                 
             default:
                 if (session.businessId) {
@@ -238,6 +246,18 @@ class MessageHandler {
         }
         
         if (titleLower === 'enviar comprobante' || titleLower === 'enviar voucher') {
+            const pedidoId = stateManager.getActivePedido(from);
+            if (!pedidoId && session.businessId) {
+                // Buscar el último pedido pendiente de pago
+                const pedidos = await sheetsService.getOrdersByClient(session.businessId, from);
+                const pedidoPendiente = pedidos.find(p => p.estado === 'PENDIENTE_PAGO');
+                if (pedidoPendiente) {
+                    stateManager.setStep(from, 'esperando_voucher', { pedidoId: pedidoPendiente.id });
+                }
+            } else if (pedidoId) {
+                stateManager.setStep(from, 'esperando_voucher', { pedidoId });
+            }
+            
             return await whatsappService.sendMessage(from,
                 '📸 Perfecto!\n\nEnvia la foto o captura de tu comprobante de pago.'
             );

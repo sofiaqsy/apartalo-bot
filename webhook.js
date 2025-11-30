@@ -62,7 +62,12 @@ router.post('/', async (req, res) => {
                                         
                                     case 'image':
                                         messageBody = message.image.caption || 'Imagen recibida';
-                                        mediaUrl = message.image.id;
+                                        mediaUrl = message.image.id; // ID de la imagen, no URL
+                                        break;
+                                        
+                                    case 'document':
+                                        messageBody = message.document.caption || 'Documento recibido';
+                                        mediaUrl = message.document.id;
                                         break;
                                         
                                     case 'interactive':
@@ -91,6 +96,9 @@ router.post('/', async (req, res) => {
                                 console.log(`\n📱 Mensaje de ${from}: ${messageBody}`);
                                 if (interactiveData) {
                                     console.log(`   Interactive ID: ${interactiveData.id}`);
+                                }
+                                if (mediaUrl) {
+                                    console.log(`   Media ID: ${mediaUrl}`);
                                 }
                                 
                                 const formattedFrom = `whatsapp:+${from}`;
