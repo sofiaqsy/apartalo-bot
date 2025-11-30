@@ -304,7 +304,7 @@ router.post('/:businessId/live/broadcast/:codigo', async (req, res) => {
         for (const sub of subscribers) {
             try {
                 // Crear mensaje SIN emojis y SIN stock
-                let mensaje = `PRODUCTO EN VIVO\n\n`;
+                let mensaje = `\n`;
                 mensaje += `*${producto.nombre}*\n`;
                 if (producto.descripcion) {
                     mensaje += `${producto.descripcion}\n`;
