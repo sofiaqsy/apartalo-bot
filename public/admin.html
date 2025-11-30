@@ -210,10 +210,10 @@
         <div id="tab-orders" class="tab-content">
             <div class="filters" id="order-filters">
                 <div class="filter-chip active" data-filter="all">Todos</div>
-                <div class="filter-chip" data-filter="PENDIENTE_PAGO">💰 Pago</div>
-                <div class="filter-chip" data-filter="PENDIENTE_VALIDACION">🔍 Validar</div>
-                <div class="filter-chip" data-filter="CONFIRMADO">✅ Confirmado</div>
-                <div class="filter-chip" data-filter="EN_PREPARACION">📦 Preparando</div>
+                <div class="filter-chip" data-filter="PENDIENTE_PAGO">Pago</div>
+                <div class="filter-chip" data-filter="PENDIENTE_VALIDACION">Validar</div>
+                <div class="filter-chip" data-filter="CONFIRMADO">Confirmado</div>
+                <div class="filter-chip" data-filter="EN_PREPARACION">Preparando</div>
             </div>
             <div id="orders-list"><div class="loading"><div class="spinner"></div>Cargando pedidos...</div></div>
         </div>
@@ -321,12 +321,12 @@
         let liveStats = { subscribers: [], products: [] }, sentProducts = new Set();
         const API_BASE = '/api';
         const ESTADOS = [
-            { id: 'PENDIENTE_PAGO', label: '💰 Pago Pendiente' },
-            { id: 'PENDIENTE_VALIDACION', label: '🔍 Validando' },
-            { id: 'CONFIRMADO', label: '✅ Confirmado' },
-            { id: 'EN_PREPARACION', label: '📦 Preparando' },
-            { id: 'ENVIADO', label: '🚚 Enviado' },
-            { id: 'ENTREGADO', label: '🎉 Entregado' }
+            { id: 'PENDIENTE_PAGO', label: 'Pago Pendiente' },
+            { id: 'PENDIENTE_VALIDACION', label: 'Validando' },
+            { id: 'CONFIRMADO', label: 'Confirmado' },
+            { id: 'EN_PREPARACION', label: 'Preparando' },
+            { id: 'ENVIADO', label: 'Enviado' },
+            { id: 'ENTREGADO', label: 'Entregado' }
         ];
         
         async function init() { await loadBusinesses(); setupNavigation(); setupFilters(); registerSW(); setInterval(refreshLiveStats, 10000); }
