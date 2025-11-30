@@ -170,19 +170,53 @@ class SheetsService {
         return inventory.find(p => p.codigo.toUpperCase() === codigo.toUpperCase());
     }
     
+    // Genera el siguiente código de producto: PREFIJO + número secuencial
+    async generateProductCode(businessId) {
+        const business = this.getBusiness(businessId);
+        if (!business) return null;
+        
+        const prefijo = business.prefijo;
+        const productos = await this.getInventory(businessId, true);
+        
+        // Encontrar el número más alto existente
+        let maxNum = 0;
+        for (const p of productos) {
+            const match = p.codigo.match(new RegExp(`^${prefijo}(\\d+)$`, 'i'));
+            if (match) {
+                const num = parseInt(match[1]);
+                if (num > maxNum) maxNum = num;
+            }
+        }
+        
+        // Generar nuevo código con padding de 2 dígitos
+        const nextNum = maxNum + 1;
+        const codigo = `${prefijo}${nextNum.toString().padStart(2, '0')}`;
+        
+        return codigo;
+    }
+    
     async createProduct(businessId, productData) {
         const business = this.getBusiness(businessId);
         if (!business) return { success: false, error: 'Negocio no encontrado' };
         
         try {
+            // Autogenerar código si no viene
+            let codigo = productData.codigo;
+            if (!codigo) {
+                codigo = await this.generateProductCode(businessId);
+                if (!codigo) {
+                    return { success: false, error: 'Error generando código de producto' };
+                }
+            }
+            
             // Verificar si ya existe
-            const existing = await this.getProductByCode(businessId, productData.codigo);
+            const existing = await this.getProductByCode(businessId, codigo);
             if (existing) {
                 return { success: false, error: 'Ya existe un producto con ese código' };
             }
             
             const valores = [[
-                productData.codigo,
+                codigo,
                 productData.nombre,
                 productData.descripcion || '',
                 productData.precio,
@@ -199,8 +233,8 @@ class SheetsService {
                 resource: { values: valores }
             });
             
-            console.log(`✅ Producto creado: ${productData.codigo}`);
-            return { success: true, codigo: productData.codigo };
+            console.log(`✅ Producto creado: ${codigo}`);
+            return { success: true, codigo };
             
         } catch (error) {
             console.error('❌ Error creando producto:', error.message);
