@@ -257,32 +257,31 @@ router.post('/:businessId/live/broadcast/:codigo', async (req, res) => {
         liveManager.publishProduct(businessId, producto);
         
         // Enviar mensaje a cada suscrito
-        const negocio = sheetsService.getBusiness(businessId);
         let enviados = 0;
         let errores = 0;
         
         for (const sub of subscribers) {
             try {
-                // Crear mensaje con botón de reserva
-                let mensaje = `🔴 *¡PRODUCTO EN VIVO!*\n\n`;
-                mensaje += `📦 *${producto.nombre}*\n`;
+                // Crear mensaje SIN emojis
+                let mensaje = `PRODUCTO EN VIVO\n\n`;
+                mensaje += `*${producto.nombre}*\n`;
                 if (producto.descripcion) {
-                    mensaje += `📝 ${producto.descripcion}\n`;
+                    mensaje += `${producto.descripcion}\n`;
                 }
-                mensaje += `💰 *S/${producto.precio.toFixed(2)}*\n`;
-                mensaje += `📊 Stock: ${producto.disponible} unidad(es)\n\n`;
-                mensaje += `⚡ *¡El primero en tocar se lo lleva!*`;
+                mensaje += `Precio: S/${producto.precio.toFixed(2)}\n`;
+                mensaje += `Stock: ${producto.disponible} unidad(es)\n\n`;
+                mensaje += `El primero en tocar se lo lleva`;
                 
                 // Enviar con imagen si tiene
                 if (producto.imagenUrl) {
                     await whatsappService.sendImageMessage(sub.whatsapp, producto.imagenUrl, mensaje);
                 }
                 
-                // Enviar botón de reserva
+                // Enviar boton de reserva con texto "ApartaLo"
                 await whatsappService.sendButtonMessage(sub.whatsapp, 
-                    producto.imagenUrl ? '¿Lo quieres?' : mensaje,
+                    producto.imagenUrl ? 'Toca el boton para reservar' : mensaje,
                     [{ 
-                        title: '🛒 ¡LO QUIERO!',
+                        title: 'ApartaLo',
                         id: `RESERVAR_${businessId}_${producto.codigo}`
                     }]
                 );
@@ -359,7 +358,7 @@ router.post('/:businessId/live/notify', async (req, res) => {
         for (const sub of subscribers) {
             try {
                 await whatsappService.sendMessage(sub.whatsapp, 
-                    `📢 *${negocio.nombre}*\n\n${mensaje}`
+                    `*${negocio.nombre}*\n\n${mensaje}`
                 );
                 enviados++;
             } catch (err) {
@@ -369,7 +368,7 @@ router.post('/:businessId/live/notify', async (req, res) => {
         
         res.json({
             success: true,
-            message: `Notificación enviada a ${enviados} usuarios`,
+            message: `Notificacion enviada a ${enviados} usuarios`,
             enviados
         });
     } catch (error) {
@@ -480,7 +479,7 @@ router.put('/:businessId/pedidos/:id/estado', async (req, res) => {
         if (!estado || !estadosValidos.includes(estado.toUpperCase())) {
             return res.status(400).json({ 
                 success: false, 
-                error: `Estado inválido. Valores permitidos: ${estadosValidos.join(', ')}` 
+                error: `Estado invalido. Valores permitidos: ${estadosValidos.join(', ')}` 
             });
         }
         
