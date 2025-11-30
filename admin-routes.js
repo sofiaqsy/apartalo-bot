@@ -1,0 +1,400 @@
+/**
+ * Admin Routes - API de Administración
+ * Gestión de productos, pedidos y negocios
+ */
+
+const express = require('express');
+const router = express.Router();
+const sheetsService = require('./sheets-service');
+
+// ========================================
+// NEGOCIOS
+// ========================================
+
+// GET /api/negocios - Listar todos los negocios
+router.get('/negocios', async (req, res) => {
+    try {
+        const negocios = sheetsService.getBusinesses();
+        res.json({
+            success: true,
+            count: negocios.length,
+            data: negocios
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// GET /api/negocios/:id - Obtener un negocio
+router.get('/negocios/:id', async (req, res) => {
+    try {
+        const negocio = sheetsService.getBusiness(req.params.id);
+        if (!negocio) {
+            return res.status(404).json({ success: false, error: 'Negocio no encontrado' });
+        }
+        res.json({ success: true, data: negocio });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST /api/negocios/reload - Recargar negocios desde Sheets
+router.post('/negocios/reload', async (req, res) => {
+    try {
+        const negocios = await sheetsService.loadBusinesses();
+        res.json({
+            success: true,
+            message: 'Negocios recargados',
+            count: negocios.length,
+            data: negocios
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ========================================
+// PRODUCTOS / INVENTARIO
+// ========================================
+
+// GET /api/:businessId/productos - Listar productos
+router.get('/:businessId/productos', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const { estado, disponible } = req.query;
+        
+        let productos = await sheetsService.getInventory(businessId);
+        
+        // Filtrar por estado si se especifica
+        if (estado) {
+            productos = productos.filter(p => p.estado.toUpperCase() === estado.toUpperCase());
+        }
+        
+        // Filtrar solo disponibles
+        if (disponible === 'true') {
+            productos = productos.filter(p => p.disponible > 0);
+        }
+        
+        res.json({
+            success: true,
+            businessId,
+            count: productos.length,
+            data: productos
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// GET /api/:businessId/productos/:codigo - Obtener un producto
+router.get('/:businessId/productos/:codigo', async (req, res) => {
+    try {
+        const { businessId, codigo } = req.params;
+        const producto = await sheetsService.getProductByCode(businessId, codigo);
+        
+        if (!producto) {
+            return res.status(404).json({ success: false, error: 'Producto no encontrado' });
+        }
+        
+        res.json({ success: true, data: producto });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST /api/:businessId/productos - Crear producto
+router.post('/:businessId/productos', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const { codigo, nombre, descripcion, precio, stock, imagenUrl } = req.body;
+        
+        if (!codigo || !nombre || precio === undefined || stock === undefined) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'Campos requeridos: codigo, nombre, precio, stock' 
+            });
+        }
+        
+        const result = await sheetsService.createProduct(businessId, {
+            codigo,
+            nombre,
+            descripcion: descripcion || '',
+            precio: parseFloat(precio),
+            stock: parseInt(stock),
+            imagenUrl: imagenUrl || '',
+            estado: 'ACTIVO'
+        });
+        
+        res.status(201).json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// PUT /api/:businessId/productos/:codigo - Actualizar producto
+router.put('/:businessId/productos/:codigo', async (req, res) => {
+    try {
+        const { businessId, codigo } = req.params;
+        const updates = req.body;
+        
+        const result = await sheetsService.updateProduct(businessId, codigo, updates);
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// PUT /api/:businessId/productos/:codigo/stock - Actualizar solo stock
+router.put('/:businessId/productos/:codigo/stock', async (req, res) => {
+    try {
+        const { businessId, codigo } = req.params;
+        const { stock, stockReservado } = req.body;
+        
+        const result = await sheetsService.updateProductStock(businessId, codigo, {
+            stock: stock !== undefined ? parseInt(stock) : undefined,
+            stockReservado: stockReservado !== undefined ? parseInt(stockReservado) : undefined
+        });
+        
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// DELETE /api/:businessId/productos/:codigo - Desactivar producto
+router.delete('/:businessId/productos/:codigo', async (req, res) => {
+    try {
+        const { businessId, codigo } = req.params;
+        const result = await sheetsService.updateProduct(businessId, codigo, { estado: 'INACTIVO' });
+        res.json({ success: true, message: 'Producto desactivado', data: result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST /api/:businessId/productos/:codigo/liberar - Liberar stock reservado
+router.post('/:businessId/productos/:codigo/liberar', async (req, res) => {
+    try {
+        const { businessId, codigo } = req.params;
+        const { cantidad } = req.body;
+        
+        if (!cantidad || cantidad < 1) {
+            return res.status(400).json({ success: false, error: 'Cantidad debe ser mayor a 0' });
+        }
+        
+        const result = await sheetsService.releaseStock(businessId, codigo, parseInt(cantidad));
+        res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ========================================
+// PEDIDOS
+// ========================================
+
+// GET /api/:businessId/pedidos - Listar pedidos
+router.get('/:businessId/pedidos', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const { estado, fecha, limit } = req.query;
+        
+        let pedidos = await sheetsService.getAllOrders(businessId);
+        
+        // Filtrar por estado
+        if (estado) {
+            pedidos = pedidos.filter(p => p.estado.toUpperCase() === estado.toUpperCase());
+        }
+        
+        // Filtrar por fecha
+        if (fecha) {
+            pedidos = pedidos.filter(p => p.fecha === fecha);
+        }
+        
+        // Limitar resultados
+        if (limit) {
+            pedidos = pedidos.slice(0, parseInt(limit));
+        }
+        
+        res.json({
+            success: true,
+            businessId,
+            count: pedidos.length,
+            data: pedidos
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// GET /api/:businessId/pedidos/stats - Estadísticas de pedidos
+router.get('/:businessId/pedidos/stats', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const pedidos = await sheetsService.getAllOrders(businessId);
+        
+        const stats = {
+            total: pedidos.length,
+            porEstado: {},
+            montoTotal: 0,
+            hoy: 0
+        };
+        
+        const hoy = new Date().toLocaleDateString('es-PE');
+        
+        pedidos.forEach(p => {
+            // Contar por estado
+            stats.porEstado[p.estado] = (stats.porEstado[p.estado] || 0) + 1;
+            // Sumar monto
+            stats.montoTotal += p.total || 0;
+            // Contar de hoy
+            if (p.fecha === hoy) stats.hoy++;
+        });
+        
+        res.json({ success: true, data: stats });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// GET /api/:businessId/pedidos/:id - Obtener un pedido
+router.get('/:businessId/pedidos/:id', async (req, res) => {
+    try {
+        const { businessId, id } = req.params;
+        const pedido = await sheetsService.getOrderById(businessId, id);
+        
+        if (!pedido) {
+            return res.status(404).json({ success: false, error: 'Pedido no encontrado' });
+        }
+        
+        res.json({ success: true, data: pedido });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// PUT /api/:businessId/pedidos/:id/estado - Actualizar estado del pedido
+router.put('/:businessId/pedidos/:id/estado', async (req, res) => {
+    try {
+        const { businessId, id } = req.params;
+        const { estado, observaciones } = req.body;
+        
+        const estadosValidos = [
+            'PENDIENTE_PAGO',
+            'PENDIENTE_VALIDACION',
+            'CONFIRMADO',
+            'EN_PREPARACION',
+            'ENVIADO',
+            'ENTREGADO',
+            'CANCELADO'
+        ];
+        
+        if (!estado || !estadosValidos.includes(estado.toUpperCase())) {
+            return res.status(400).json({ 
+                success: false, 
+                error: `Estado inválido. Valores permitidos: ${estadosValidos.join(', ')}` 
+            });
+        }
+        
+        const result = await sheetsService.updateOrderStatus(businessId, id, estado.toUpperCase());
+        
+        if (observaciones) {
+            await sheetsService.updateOrderObservations(businessId, id, observaciones);
+        }
+        
+        res.json({
+            success: true,
+            message: `Pedido ${id} actualizado a ${estado}`,
+            data: result
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST /api/:businessId/pedidos/:id/cancelar - Cancelar pedido y liberar stock
+router.post('/:businessId/pedidos/:id/cancelar', async (req, res) => {
+    try {
+        const { businessId, id } = req.params;
+        const { motivo } = req.body;
+        
+        // Obtener pedido
+        const pedido = await sheetsService.getOrderById(businessId, id);
+        if (!pedido) {
+            return res.status(404).json({ success: false, error: 'Pedido no encontrado' });
+        }
+        
+        // Liberar stock de cada producto
+        if (pedido.productos) {
+            const items = pedido.productos.split('|');
+            for (const item of items) {
+                const [codigo, , cantidad] = item.split(':');
+                if (codigo && cantidad) {
+                    await sheetsService.releaseStock(businessId, codigo, parseInt(cantidad));
+                }
+            }
+        }
+        
+        // Actualizar estado
+        await sheetsService.updateOrderStatus(businessId, id, 'CANCELADO');
+        
+        if (motivo) {
+            await sheetsService.updateOrderObservations(businessId, id, `CANCELADO: ${motivo}`);
+        }
+        
+        res.json({
+            success: true,
+            message: `Pedido ${id} cancelado y stock liberado`
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ========================================
+// CLIENTES
+// ========================================
+
+// GET /api/:businessId/clientes - Listar clientes
+router.get('/:businessId/clientes', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const clientes = await sheetsService.getAllClients(businessId);
+        
+        res.json({
+            success: true,
+            businessId,
+            count: clientes.length,
+            data: clientes
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// GET /api/:businessId/clientes/:whatsapp - Buscar cliente por WhatsApp
+router.get('/:businessId/clientes/:whatsapp', async (req, res) => {
+    try {
+        const { businessId, whatsapp } = req.params;
+        const cliente = await sheetsService.findClient(businessId, whatsapp);
+        
+        if (!cliente) {
+            return res.status(404).json({ success: false, error: 'Cliente no encontrado' });
+        }
+        
+        // Obtener historial de pedidos
+        const pedidos = await sheetsService.getOrdersByClient(businessId, whatsapp);
+        
+        res.json({ 
+            success: true, 
+            data: {
+                ...cliente,
+                pedidos: pedidos
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+module.exports = router;
