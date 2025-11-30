@@ -20,7 +20,7 @@ const adminRoutes = require('./admin-routes');
 const app = express();
 
 app.use(express.urlencoded({ extended: false }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // ========================================
 // ARCHIVOS ESTATICOS (PWA)

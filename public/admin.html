@@ -277,8 +277,16 @@
                     <input type="number" class="form-input" id="product-stock" required min="0" placeholder="0">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">URL Imagen</label>
-                    <input type="url" class="form-input" id="product-imagen" placeholder="https://...">
+                    <label class="form-label">Imagen del Producto</label>
+                    <div id="image-preview-container" style="display:none;margin-bottom:12px;position:relative;">
+                        <img id="image-preview" style="max-width:100%;max-height:200px;border-radius:8px;">
+                        <button type="button" onclick="clearImage()" style="position:absolute;top:8px;right:8px;background:var(--danger);color:white;border:none;border-radius:50%;width:28px;height:28px;cursor:pointer;font-size:1rem;">&times;</button>
+                    </div>
+                    <input type="file" id="product-imagen-file" accept="image/*" onchange="previewImage(this)" style="display:none;">
+                    <button type="button" class="btn btn-secondary btn-block" onclick="document.getElementById('product-imagen-file').click()" style="margin-bottom:8px;">
+                        <span id="upload-btn-text">Seleccionar Imagen</span>
+                    </button>
+                    <input type="hidden" id="product-imagen">
                 </div>
                 <button type="submit" class="btn btn-primary btn-block">Guardar Producto</button>
             </form>
@@ -511,8 +519,58 @@
             document.getElementById('product-modal-title').textContent = 'Nuevo Producto';
             document.getElementById('product-form').reset();
             document.getElementById('product-edit-code').value = '';
-            document.getElementById('product-code-display').innerHTML = '<p style="color:var(--text-muted);margin-bottom:16px">📦 El código se generará automáticamente</p>';
+            document.getElementById('product-code-display').innerHTML = '<p style="color:var(--text-muted);margin-bottom:16px">El código se generará automáticamente</p>';
+            document.getElementById('product-imagen').value = '';
+            clearImagePreview();
             openModal('modal-product');
+        }
+        
+        function previewImage(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    document.getElementById('image-preview').src = e.target.result;
+                    document.getElementById('image-preview-container').style.display = 'block';
+                    document.getElementById('upload-btn-text').textContent = 'Cambiar Imagen';
+                };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+        
+        function clearImage() {
+            document.getElementById('product-imagen-file').value = '';
+            document.getElementById('product-imagen').value = '';
+            clearImagePreview();
+        }
+        
+        function clearImagePreview() {
+            document.getElementById('image-preview-container').style.display = 'none';
+            document.getElementById('image-preview').src = '';
+            document.getElementById('upload-btn-text').textContent = 'Seleccionar Imagen';
+        }
+        
+        async function uploadImage(file) {
+            return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    const base64 = e.target.result.split(',')[1];
+                    const mimeType = file.type;
+                    const filename = file.name;
+                    
+                    try {
+                        const res = await fetch(`${API_BASE}/${currentBusiness}/upload-image`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ base64, mimeType, filename })
+                        });
+                        resolve(await res.json());
+                    } catch (err) {
+                        resolve({ success: false, error: err.message });
+                    }
+                };
+                reader.onerror = () => resolve({ success: false, error: 'Error leyendo archivo' });
+                reader.readAsDataURL(file);
+            });
         }
         
         function editProduct(codigo) {
@@ -520,24 +578,50 @@
             if (!product) return;
             document.getElementById('product-modal-title').textContent = 'Editar Producto';
             document.getElementById('product-edit-code').value = codigo;
-            document.getElementById('product-code-display').innerHTML = `<div class="code-badge">📦 ${codigo}</div>`;
+            document.getElementById('product-code-display').innerHTML = `<div class="code-badge">${codigo}</div>`;
             document.getElementById('product-nombre').value = product.nombre;
             document.getElementById('product-descripcion').value = product.descripcion || '';
             document.getElementById('product-precio').value = product.precio;
             document.getElementById('product-stock').value = product.stock;
             document.getElementById('product-imagen').value = product.imagenUrl || '';
+            document.getElementById('product-imagen-file').value = '';
+            
+            // Mostrar imagen existente si hay
+            if (product.imagenUrl) {
+                document.getElementById('image-preview').src = product.imagenUrl;
+                document.getElementById('image-preview-container').style.display = 'block';
+                document.getElementById('upload-btn-text').textContent = 'Cambiar Imagen';
+            } else {
+                clearImagePreview();
+            }
+            
             openModal('modal-product');
         }
         
         async function saveProduct(event) {
             event.preventDefault();
             const editCode = document.getElementById('product-edit-code').value;
+            const fileInput = document.getElementById('product-imagen-file');
+            let imagenUrl = document.getElementById('product-imagen').value;
+            
+            // Si hay una imagen nueva seleccionada, subirla primero
+            if (fileInput.files && fileInput.files[0]) {
+                showToast('Subiendo imagen...', 'success');
+                const uploadResult = await uploadImage(fileInput.files[0]);
+                if (uploadResult.success) {
+                    imagenUrl = uploadResult.url;
+                } else {
+                    showToast('Error al subir imagen: ' + (uploadResult.error || 'Error desconocido'), 'error');
+                    return;
+                }
+            }
+            
             const data = {
                 nombre: document.getElementById('product-nombre').value,
                 descripcion: document.getElementById('product-descripcion').value,
                 precio: parseFloat(document.getElementById('product-precio').value),
                 stock: parseInt(document.getElementById('product-stock').value),
-                imagenUrl: document.getElementById('product-imagen').value
+                imagenUrl: imagenUrl
             };
             let result;
             if (editCode) {

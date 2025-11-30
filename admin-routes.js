@@ -104,6 +104,47 @@ router.get('/:businessId/productos/:codigo', async (req, res) => {
     }
 });
 
+// POST /api/:businessId/upload-image - Subir imagen a Google Drive
+router.post('/:businessId/upload-image', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const { base64, mimeType, filename } = req.body;
+        
+        if (!base64) {
+            return res.status(400).json({ success: false, error: 'Imagen requerida' });
+        }
+        
+        // Convertir base64 a buffer
+        const imageBuffer = Buffer.from(base64, 'base64');
+        
+        // Generar nombre único
+        const timestamp = Date.now();
+        const ext = (mimeType || 'image/jpeg').split('/')[1] || 'jpg';
+        const uniqueFilename = `producto_${businessId}_${timestamp}.${ext}`;
+        
+        // Subir a Google Drive
+        const uploadResult = await sheetsService.uploadImageToDrive(
+            imageBuffer,
+            uniqueFilename,
+            mimeType || 'image/jpeg'
+        );
+        
+        if (!uploadResult.success) {
+            return res.status(500).json({ success: false, error: uploadResult.error || 'Error subiendo imagen' });
+        }
+        
+        res.json({
+            success: true,
+            url: uploadResult.directLink,
+            fileId: uploadResult.fileId
+        });
+        
+    } catch (error) {
+        console.error('Error subiendo imagen:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
 // POST /api/:businessId/productos - Crear producto
 router.post('/:businessId/productos', async (req, res) => {
     try {
@@ -262,14 +303,13 @@ router.post('/:businessId/live/broadcast/:codigo', async (req, res) => {
         
         for (const sub of subscribers) {
             try {
-                // Crear mensaje SIN emojis
+                // Crear mensaje SIN emojis y SIN stock
                 let mensaje = `PRODUCTO EN VIVO\n\n`;
                 mensaje += `*${producto.nombre}*\n`;
                 if (producto.descripcion) {
                     mensaje += `${producto.descripcion}\n`;
                 }
-                mensaje += `Precio: S/${producto.precio.toFixed(2)}\n`;
-                mensaje += `Stock: ${producto.disponible} unidad(es)\n\n`;
+                mensaje += `Precio: S/${producto.precio.toFixed(2)}\n\n`;
                 mensaje += `El primero en tocar se lo lleva`;
                 
                 // Enviar con imagen si tiene
