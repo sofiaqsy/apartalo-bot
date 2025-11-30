@@ -566,7 +566,16 @@
             if (!currentOrder) return;
             document.getElementById('order-detail-id').textContent = currentOrder.id;
             const productos = currentOrder.productos ? currentOrder.productos.split('|').map(p => { const [codigo, nombre, cantidad, precio] = p.split(':'); return `<div>${cantidad}x ${nombre} (${codigo}) - S/${parseFloat(precio).toFixed(2)}</div>`; }).join('') : 'Sin productos';
-            document.getElementById('order-detail-content').innerHTML = `<div class="card" style="background:var(--bg-input)"><p><strong>👤 Cliente:</strong> ${currentOrder.cliente || 'Sin nombre'}</p><p><strong>📱 WhatsApp:</strong> ${currentOrder.whatsapp}</p><p><strong>📍 Dirección:</strong> ${currentOrder.direccion || 'No especificada'}</p><p><strong>📅 Fecha:</strong> ${currentOrder.fecha} ${currentOrder.hora}</p><hr style="border-color:#3a3a5a;margin:12px 0"><p><strong>📦 Productos:</strong></p>${productos}<hr style="border-color:#3a3a5a;margin:12px 0"><p style="font-size:1.25rem"><strong>Total: S/${currentOrder.total.toFixed(2)}</strong></p></div>`;
+            
+            // Agregar sección de voucher si existe
+            let voucherHtml = '';
+            if (currentOrder.voucherUrl) {
+                voucherHtml = `<hr style="border-color:#3a3a5a;margin:12px 0"><p><strong>📸 Comprobante:</strong></p><a href="${currentOrder.voucherUrl}" target="_blank" style="color:var(--primary);text-decoration:none"><img src="${currentOrder.voucherUrl}" style="width:100%;max-width:400px;border-radius:8px;margin-top:8px;cursor:pointer" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><p style="display:none;color:var(--primary);margin-top:8px">🔗 Ver comprobante</p></a>`;
+            } else if (currentOrder.estado === 'PENDIENTE_PAGO') {
+                voucherHtml = `<hr style="border-color:#3a3a5a;margin:12px 0"><p style="color:var(--text-muted)">📸 Esperando comprobante de pago</p>`;
+            }
+            
+            document.getElementById('order-detail-content').innerHTML = `<div class="card" style="background:var(--bg-input)"><p><strong>👤 Cliente:</strong> ${currentOrder.cliente || 'Sin nombre'}</p><p><strong>📱 WhatsApp:</strong> ${currentOrder.whatsapp}</p><p><strong>📍 Dirección:</strong> ${currentOrder.direccion || 'No especificada'}</p><p><strong>📅 Fecha:</strong> ${currentOrder.fecha} ${currentOrder.hora}</p><hr style="border-color:#3a3a5a;margin:12px 0"><p><strong>📦 Productos:</strong></p>${productos}${voucherHtml}<hr style="border-color:#3a3a5a;margin:12px 0"><p style="font-size:1.25rem"><strong>Total: S/${currentOrder.total.toFixed(2)}</strong></p></div>`;
             selectedStatus = currentOrder.estado;
             document.getElementById('status-options').innerHTML = ESTADOS.map(e => `<div class="status-option status-${e.id} ${e.id === selectedStatus ? 'selected' : ''}" onclick="selectStatus('${e.id}')">${e.label}</div>`).join('');
             openModal('modal-order');
