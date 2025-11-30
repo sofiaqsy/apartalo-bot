@@ -109,7 +109,7 @@ Cada negocio tiene su propio spreadsheet con estas hojas:
 | H | Productos | Productos (formato: codigo:nombre:cant:precio) |
 | I | Total | Total del pedido |
 | J | Estado | Estado del pedido |
-| K | VoucherURL | URL del comprobante |
+| K | VoucherURLs | URLs de comprobantes (formato: url1|url2|url3) |
 | L | Observaciones | Notas adicionales |
 
 **Estados de pedido:**

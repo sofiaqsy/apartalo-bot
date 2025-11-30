@@ -75,6 +75,20 @@ class MessageHandler {
             return await this.mostrarMenuNegocio(from, session.businessId);
         }
         
+        if (mensajeLower === 'listo' && session.step === 'esperando_voucher') {
+            // Finalizar envío de comprobantes
+            const pedidoId = session.data?.pedidoId;
+            stateManager.clearActivePedido(from);
+            stateManager.setStep(from, 'esperando_codigo');
+            
+            return await whatsappService.sendMessage(from,
+                '✅ Perfecto!\n\n' +
+                'Tu pedido ' + (pedidoId || '') + ' está siendo verificado.\n\n' +
+                'Te notificaremos cuando sea confirmado.\n\n' +
+                'Gracias por tu compra! 🎉'
+            );
+        }
+        
         // COMANDOS DE LIVE
         if (mensajeLower === 'live 5' || mensajeLower === 'live5' || mensajeLower === 'live 5 min') {
             return await this.suscribirAlLive(from, 5);
@@ -980,7 +994,19 @@ class MessageHandler {
     
     async procesarVoucher(from, mensaje, mediaUrl) {
         const session = stateManager.getSession(from);
-        const pedidoId = session.data?.pedidoId;
+        let pedidoId = session.data?.pedidoId;
+        
+        // Si no hay pedidoId en la sesión, buscar el último pedido pendiente
+        if (!pedidoId && session.businessId) {
+            const pedidos = await sheetsService.getOrdersByClient(session.businessId, from);
+            const pedidoPendiente = pedidos.find(p => 
+                p.estado === 'PENDIENTE_PAGO' || p.estado === 'PENDIENTE_VALIDACION'
+            );
+            if (pedidoPendiente) {
+                pedidoId = pedidoPendiente.id;
+                stateManager.setStep(from, 'esperando_voucher', { pedidoId });
+            }
+        }
         
         if (!pedidoId) {
             return await this.mostrarMenuNegocio(from, session.businessId);
@@ -988,8 +1014,9 @@ class MessageHandler {
         
         if (!mediaUrl) {
             return await whatsappService.sendMessage(from,
-                'Por favor, envia una imagen de tu voucher de pago.\n\n' +
-                'Tu codigo de pedido es: ' + pedidoId
+                'Por favor, envia una imagen de tu comprobante de pago.\n\n' +
+                'Tu codigo de pedido es: ' + pedidoId + '\n\n' +
+                'Puedes enviar múltiples comprobantes si lo necesitas.'
             );
         }
         
@@ -1005,7 +1032,8 @@ class MessageHandler {
         }
         
         // Subir a Google Drive
-        const filename = `voucher_${pedidoId}_${Date.now()}.jpg`;
+        const timestamp = Date.now();
+        const filename = `voucher_${pedidoId}_${timestamp}.jpg`;
         const uploadResult = await sheetsService.uploadImageToDrive(
             downloadResult.buffer,
             filename,
@@ -1018,7 +1046,11 @@ class MessageHandler {
             );
         }
         
-        // Actualizar pedido con el link de Drive
+        // Obtener pedido actual para verificar si ya tiene vouchers
+        const pedido = await sheetsService.getOrderById(session.businessId, pedidoId);
+        const vouchersActuales = pedido.voucherUrl ? pedido.voucherUrl.split('|').length : 0;
+        
+        // Actualizar pedido con el link de Drive (se agregará a los existentes)
         await sheetsService.updateOrderStatus(
             session.businessId, 
             pedidoId, 
@@ -1026,17 +1058,22 @@ class MessageHandler {
             uploadResult.directLink
         );
         
-        // Limpiar el pedido activo ya que se envió el voucher
-        stateManager.clearActivePedido(from);
+        const totalVouchers = vouchersActuales + 1;
         
-        stateManager.setStep(from, 'esperando_codigo');
+        let mensaje_respuesta = '✅ Comprobante recibido!\n\n';
+        mensaje_respuesta += 'Pedido: ' + pedidoId + '\n';
+        mensaje_respuesta += 'Comprobantes enviados: ' + totalVouchers + '\n\n';
         
-        return await whatsappService.sendMessage(from,
-            '✅ Voucher recibido!\n\n' +
-            'Tu pedido ' + pedidoId + ' esta siendo verificado.\n\n' +
-            'Te notificaremos cuando sea confirmado.\n\n' +
-            'Gracias por tu compra!'
-        );
+        if (totalVouchers === 1) {
+            mensaje_respuesta += 'Tu pedido está siendo verificado.\n\n';
+            mensaje_respuesta += 'Si necesitas enviar otro comprobante (corregido o adicional), puedes enviarlo ahora.';
+            // Mantener el step para permitir más vouchers
+        } else {
+            mensaje_respuesta += 'Comprobante adicional agregado.\n\n';
+            mensaje_respuesta += 'Puedes enviar más comprobantes si lo necesitas, o escribe "listo" para finalizar.';
+        }
+        
+        return await whatsappService.sendMessage(from, mensaje_respuesta);
     }
 }
 

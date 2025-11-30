@@ -538,7 +538,12 @@ class SheetsService {
             ];
             
             if (voucherUrl) {
-                updates.push({ range: `Pedidos!K${pedido.rowIndex}`, values: [[voucherUrl]] });
+                // Agregar el nuevo voucher a la lista existente
+                const existingVouchers = pedido.voucherUrl ? pedido.voucherUrl.split('|').filter(v => v) : [];
+                existingVouchers.push(voucherUrl);
+                const allVouchers = existingVouchers.join('|');
+                
+                updates.push({ range: `Pedidos!K${pedido.rowIndex}`, values: [[allVouchers]] });
             }
             
             await this.sheets.spreadsheets.values.batchUpdate({
