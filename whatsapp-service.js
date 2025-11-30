@@ -172,6 +172,79 @@ class WhatsAppService {
         }
     }
     
+    async sendProductLiveMessage(to, producto) {
+        const phoneNumber = this.cleanPhone(to);
+        
+        if (this.isDevelopment) {
+            console.log('\n' + '='.repeat(60));
+            console.log('📦 PRODUCTO EN VIVO (MODO DEV)');
+            console.log('Para:', phoneNumber);
+            console.log('Producto:', producto.nombre);
+            console.log('Precio: S/' + producto.precio.toFixed(2));
+            console.log('='.repeat(60) + '\n');
+            return { status: 'simulated' };
+        }
+        
+        try {
+            const url = `${this.apiUrl}/${this.apiVersion}/${this.phoneId}/messages`;
+            
+            // Construir mensaje con detalles del producto
+            let bodyText = `*${producto.nombre}*\n`;
+            if (producto.descripcion) {
+                bodyText += `${producto.descripcion}\n`;
+            }
+            bodyText += `\nPrecio: S/${producto.precio.toFixed(2)}\n`;
+            bodyText += `Stock: ${producto.disponible} unidades\n`;
+            bodyText += `\n⚡ El primero en tocar "ApartaLo" se lo lleva`;
+            
+            const payload = {
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to: phoneNumber,
+                type: 'interactive',
+                interactive: {
+                    type: 'button',
+                    body: { text: bodyText },
+                    action: {
+                        buttons: [
+                            {
+                                type: 'reply',
+                                reply: {
+                                    id: `RESERVAR_${producto.businessId}_${producto.codigo}`,
+                                    title: 'ApartaLo'
+                                }
+                            }
+                        ]
+                    }
+                }
+            };
+            
+            // Agregar imagen como header si existe
+            if (producto.imagenUrl) {
+                payload.interactive.header = {
+                    type: 'image',
+                    image: {
+                        link: producto.imagenUrl
+                    }
+                };
+            }
+            
+            const response = await axios.post(url, payload, {
+                headers: {
+                    'Authorization': `Bearer ${this.token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            console.log(`✅ Producto en VIVO enviado a ${phoneNumber}`);
+            return response.data;
+            
+        } catch (error) {
+            console.error('❌ Error enviando producto en vivo:', error.response?.data || error.message);
+            return null;
+        }
+    }
+    
     async sendImageMessage(to, imageUrl, caption = '') {
         const phoneNumber = this.cleanPhone(to);
         
