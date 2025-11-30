@@ -1,7 +1,7 @@
 {
   "name": "apartalo-bot",
-  "version": "1.0.0",
-  "description": "ApartaLo - Bot multi-negocio para ventas por WhatsApp en lives",
+  "version": "1.3.0",
+  "description": "ApartaLo - Bot multi-negocio para ventas por WhatsApp en lives con reservas instantaneas",
   "main": "app.js",
   "scripts": {
     "start": "node app.js",

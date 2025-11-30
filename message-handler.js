@@ -152,15 +152,11 @@ class MessageHandler {
         
         liveManager.subscribe(businessId, from, nombreUsuario, minutos);
         
-        const subscriberCount = liveManager.getSubscriberCount(businessId);
-        
-        let mensaje = 'ESTAS EN EL LIVE\n\n';
+        let mensaje = '🔴 ESTAS EN EL LIVE\n\n';
         mensaje += negocio.nombre + '\n';
-        mensaje += 'Duracion: ' + minutos + ' minutos\n';
-        mensaje += 'Conectados: ' + subscriberCount + ' personas\n\n';
-        mensaje += 'Recibiras los productos en tiempo real.\n';
-        mensaje += 'Cuando veas algo que te gusta, toca el boton para apartarlo.\n\n';
-        mensaje += 'El primero en tocar se lo lleva\n\n';
+        mensaje += 'Duracion: ' + minutos + ' minutos\n\n';
+        mensaje += '✨ Recibiras los productos en tiempo real\n';
+        mensaje += '⚡ El primero en tocar "ApartaLo" se lo lleva\n\n';
         mensaje += 'Escribe "salir" para desconectarte';
         
         stateManager.setStep(from, 'en_live');
@@ -297,29 +293,48 @@ class MessageHandler {
             );
         }
         
-        // Agregar al carrito
-        stateManager.setActiveBusiness(from, businessId);
-        stateManager.addToCart(from, businessId, {
-            codigo: resultado.producto.codigo,
-            nombre: resultado.producto.nombre,
-            cantidad: 1,
-            precio: resultado.producto.precio
-        });
+        // CREAR PEDIDO INMEDIATAMENTE en el Excel
+        const pedidoData = {
+            whatsapp: from,
+            cliente: cliente?.nombre || nombreUsuario,
+            telefono: cliente?.telefono || '',
+            direccion: cliente?.direccion || '',
+            items: [{
+                codigo: resultado.producto.codigo,
+                nombre: resultado.producto.nombre,
+                cantidad: 1,
+                precio: resultado.producto.precio,
+                subtotal: resultado.producto.precio
+            }],
+            total: resultado.producto.precio
+        };
         
-        const cart = stateManager.getCart(from, businessId);
-        const cartTotal = stateManager.getCartTotal(from, businessId);
+        const pedidoResult = await sheetsService.createOrder(businessId, pedidoData);
         
-        let mensaje = 'LO APARTASTE!\n\n';
+        if (!pedidoResult.success) {
+            // Si falla crear pedido, liberar stock
+            await sheetsService.releaseStock(businessId, productCode, 1);
+            liveManager.clearLiveProduct(businessId, productCode);
+            return await whatsappService.sendMessage(from,
+                '❌ Error al procesar tu reserva. Intenta nuevamente.'
+            );
+        }
+        
+        // Limpiar producto del live
+        liveManager.clearLiveProduct(businessId, productCode);
+        
+        let mensaje = '✅ ¡LO APARTASTE!\n\n';
         mensaje += resultado.producto.nombre + '\n';
         mensaje += 'S/' + resultado.producto.precio.toFixed(2) + '\n\n';
-        mensaje += 'Tu carrito: ' + cart.length + ' producto(s)\n';
-        mensaje += 'Total: S/' + cartTotal.toFixed(2) + '\n\n';
-        mensaje += 'Sigue en el LIVE o escribe "pagar" cuando termines.';
+        mensaje += '📦 Pedido: ' + pedidoResult.pedidoId + '\n';
+        mensaje += 'Estado: PENDIENTE_PAGO\n\n';
+        mensaje += '💳 Realiza tu pago y envia el voucher para confirmar tu pedido.';
         
-        return await whatsappService.sendButtonMessage(from, mensaje, [
-            { title: 'Pagar ahora', id: 'pagar' },
-            { title: 'Seguir en LIVE', id: 'seguir' }
-        ]);
+        stateManager.setStep(from, 'esperando_voucher', { 
+            pedidoId: pedidoResult.pedidoId 
+        });
+        
+        return await whatsappService.sendMessage(from, mensaje);
     }
     
     // BIENVENIDA Y SELECCION DE NEGOCIO
@@ -335,10 +350,15 @@ class MessageHandler {
             );
         }
         
+        // Si hay un solo negocio, mostrarlo directamente
         if (negocios.length === 1) {
             const negocio = negocios[0];
             stateManager.setActiveBusiness(from, negocio.id);
             stateManager.subscribe(from, negocio.id);
+            
+            // Mostrar pedidos pendientes si los hay
+            await this.mostrarPedidosPendientes(from, negocio.id);
+            
             return await this.mostrarMenuNegocioConLive(from, negocio.id);
         }
         
@@ -397,6 +417,9 @@ class MessageHandler {
         stateManager.setActiveBusiness(from, negocioSeleccionado.id);
         stateManager.subscribe(from, negocioSeleccionado.id);
         
+        // Mostrar pedidos pendientes si los hay
+        await this.mostrarPedidosPendientes(from, negocioSeleccionado.id);
+        
         return await this.mostrarMenuNegocioConLive(from, negocioSeleccionado.id);
     }
     
@@ -447,6 +470,80 @@ class MessageHandler {
         return await this.mostrarMenuNegocioConLive(from, businessId);
     }
     
+    // MOSTRAR PEDIDOS PENDIENTES
+    
+    async mostrarPedidosPendientes(from, businessId) {
+        try {
+            const pedidos = await sheetsService.getOrdersByClient(businessId, from);
+            
+            // Filtrar solo pedidos activos (no entregados ni cancelados)
+            const pedidosActivos = pedidos.filter(p => 
+                p.estado !== 'ENTREGADO' && p.estado !== 'CANCELADO'
+            );
+            
+            if (pedidosActivos.length === 0) return;
+            
+            let mensaje = '📦 TUS PEDIDOS ACTIVOS:\n\n';
+            
+            pedidosActivos.forEach((pedido, idx) => {
+                mensaje += `${idx + 1}. ${pedido.id}\n`;
+                mensaje += `   Estado: ${this.formatearEstado(pedido.estado)}\n`;
+                mensaje += `   Total: S/${pedido.total.toFixed(2)}\n`;
+                mensaje += `   Fecha: ${pedido.fecha}\n\n`;
+            });
+            
+            mensaje += 'Escribe el codigo del pedido para ver detalles.';
+            
+            await whatsappService.sendMessage(from, mensaje);
+        } catch (error) {
+            console.error('Error mostrando pedidos:', error);
+        }
+    }
+    
+    formatearEstado(estado) {
+        const estados = {
+            'PENDIENTE_PAGO': '⏳ Pendiente de pago',
+            'PENDIENTE_VALIDACION': '🔍 Validando voucher',
+            'CONFIRMADO': '✅ Confirmado',
+            'EN_PREPARACION': '📦 En preparacion',
+            'ENVIADO': '🚚 Enviado',
+            'ENTREGADO': '✅ Entregado',
+            'CANCELADO': '❌ Cancelado'
+        };
+        return estados[estado] || estado;
+    }
+    
+    async mostrarDetallePedido(from, businessId, pedido) {
+        let mensaje = '📦 DETALLE DEL PEDIDO\n\n';
+        mensaje += 'Codigo: ' + pedido.id + '\n';
+        mensaje += 'Estado: ' + this.formatearEstado(pedido.estado) + '\n';
+        mensaje += 'Fecha: ' + pedido.fecha + ' ' + pedido.hora + '\n\n';
+        
+        mensaje += 'Productos:\n';
+        const items = pedido.productos.split('|');
+        items.forEach(item => {
+            const [codigo, nombre, cantidad, precio] = item.split(':');
+            mensaje += '- ' + cantidad + 'x ' + nombre + ' - S/' + (parseFloat(cantidad) * parseFloat(precio)).toFixed(2) + '\n';
+        });
+        
+        mensaje += '\nTotal: S/' + pedido.total.toFixed(2) + '\n\n';
+        
+        if (pedido.direccion) {
+            mensaje += 'Entrega en:\n' + pedido.direccion + '\n\n';
+        }
+        
+        if (pedido.estado === 'PENDIENTE_PAGO') {
+            mensaje += '💳 Envia tu voucher de pago para confirmar el pedido.';
+            stateManager.setStep(from, 'esperando_voucher', { pedidoId: pedido.id });
+        } else if (pedido.estado === 'PENDIENTE_VALIDACION') {
+            mensaje += '⏳ Tu voucher esta siendo validado. Te notificaremos pronto.';
+        } else {
+            mensaje += 'Gracias por tu compra! 🎉';
+        }
+        
+        return await whatsappService.sendMessage(from, mensaje);
+    }
+    
     async procesarMenuNegocio(from, mensaje) {
         const session = stateManager.getSession(from);
         const mensajeLower = mensaje.toLowerCase();
@@ -478,6 +575,16 @@ class MessageHandler {
         }
         
         const codigo = mensaje.toUpperCase().trim();
+        
+        // Verificar si es un codigo de pedido (formato: PREFIJO-123456)
+        if (codigo.includes('-')) {
+            const pedido = await sheetsService.getOrderById(businessId, codigo);
+            if (pedido) {
+                return await this.mostrarDetallePedido(from, businessId, pedido);
+            }
+        }
+        
+        // Si no es pedido, buscar producto
         const producto = await sheetsService.getProductByCode(businessId, codigo);
         
         if (!producto) {

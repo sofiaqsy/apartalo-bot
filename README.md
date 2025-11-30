@@ -4,6 +4,20 @@ Bot multi-negocio para ventas por WhatsApp en lives de TikTok/Instagram.
 
 > *"¡Ya lo aparté!"* - La emoción de comprar en un live
 
+## 🆕 ÚLTIMA VERSIÓN: v1.3.0
+
+**🎉 Novedades:**
+- ✅ Pedidos visibles al volver al chat
+- ✅ Registro inmediato en Excel al presionar "ApartaLo"
+- ✅ Consulta rápida de pedidos por código
+- ✅ Mensajes del LIVE optimizados
+- ✅ Estados con emojis para mejor UX
+
+📚 **Documentación:**
+- [CAMBIOS_IMPLEMENTADOS.md](CAMBIOS_IMPLEMENTADOS.md) - Detalle de mejoras
+- [GUIA_ADMIN.md](GUIA_ADMIN.md) - Guía del administrador
+- [INSTRUCCIONES_PRUEBA.md](INSTRUCCIONES_PRUEBA.md) - Cómo probar
+
 ## 🎯 Problema que resuelve
 
 - **Caos de capturas**: No más "envíame captura del producto"
@@ -186,33 +200,54 @@ NODE_ENV=development
 
 ## 📱 Flujo del cliente
 
+### Flujo LIVE Commerce (Nuevo en v1.3)
+
 ```
 1. Cliente escribe "Hola"
    ↓
-2. Bot muestra lista de negocios
+2. Bot muestra pedidos activos (si tiene)
    ↓
-3. Cliente selecciona negocio
+3. Bot ofrece suscribirse al LIVE
    ↓
-4. Bot pide código de producto
+4. Cliente elige "LIVE 5 min" o "LIVE 10 min"
    ↓
-5. Cliente escribe "PL12"
+5. Vendedor hace broadcast de producto
    ↓
-6. Bot muestra producto y pide cantidad
+6. Cliente recibe producto con botón "ApartaLo"
    ↓
-7. Cliente indica cantidad
+7. Cliente presiona "ApartaLo" (el primero gana)
    ↓
-8. Bot reserva y agrega al carrito
+8. ✅ Pedido creado INMEDIATAMENTE en Excel
    ↓
-9. Cliente puede seguir agregando o pagar
+9. Cliente recibe código de pedido (ej: PL-123456)
    ↓
-10. Al pagar: pide datos (si es nuevo) o confirma (si ya compró)
+10. Cliente envía voucher de pago
     ↓
-11. Se crea pedido y se pide voucher
+11. Pedido cambia a "PENDIENTE_VALIDACION"
     ↓
-12. Cliente envía foto del voucher
-    ↓
-13. Pedido queda en "PENDIENTE_VALIDACION"
+12. Admin valida y confirma pedido
 ```
+
+### Consulta de Pedidos (Nuevo en v1.3)
+
+```
+Cliente escribe el código del pedido (ej: PL-123456)
+   ↓
+Bot muestra detalle completo:
+- Estado actual
+- Productos
+- Total
+- Dirección de entrega
+- Acción siguiente
+```
+
+## 🆕 Novedades v1.3
+
+- ✅ **Pedidos visibles al volver**: Al escribir "hola", ves tus pedidos activos
+- ✅ **Registro inmediato**: Pedido se crea al presionar "ApartaLo"
+- ✅ **Consulta rápida**: Escribe el código del pedido para ver detalles
+- ✅ **Mensajes optimizados**: Información del LIVE más clara y directa
+- ✅ **Estados con emojis**: Fácil de entender el estado de tu pedido
 
 ## 🔑 Comandos del cliente
 
@@ -224,6 +259,18 @@ NODE_ENV=development
 | `pagar` | Iniciar proceso de pago |
 | `cancelar` | Cancelar y limpiar carrito |
 | `[código]` | Buscar y reservar producto |
+
+## 📊 Estados de Pedidos
+
+| Estado | Emoji | Descripción |
+|--------|-------|-------------|
+| PENDIENTE_PAGO | ⏳ | Producto apartado, esperando pago |
+| PENDIENTE_VALIDACION | 🔍 | Voucher enviado, en validación |
+| CONFIRMADO | ✅ | Pago confirmado |
+| EN_PREPARACION | 📦 | Preparando el envío |
+| ENVIADO | 🚚 | Pedido en camino |
+| ENTREGADO | ✅ | Pedido completado |
+| CANCELADO | ❌ | Pedido cancelado, stock liberado |
 
 ## 💰 Modelo de negocio
 
