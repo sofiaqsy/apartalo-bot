@@ -1,19 +1,20 @@
 /**
  * Message Handler - Router Principal
- * Maneja el flujo de conversacion multi-negocio
+ * Maneja el flujo de conversacion multi-negocio con Live Commerce
  */
 
 const stateManager = require('./state-manager');
 const sheetsService = require('./sheets-service');
 const whatsappService = require('./whatsapp-service');
+const liveManager = require('./live-manager');
 const config = require('./config');
 
 class MessageHandler {
     constructor() {
-        console.log('📱 MessageHandler inicializado');
+        console.log('📱 MessageHandler inicializado con Live Commerce');
     }
     
-    async handleMessage(from, body, mediaUrl = null) {
+    async handleMessage(from, body, mediaUrl = null, interactiveData = null) {
         const mensaje = body.trim();
         const mensajeLower = mensaje.toLowerCase();
         const session = stateManager.getSession(from);
@@ -22,9 +23,17 @@ class MessageHandler {
         console.log(`   Texto: ${mensaje}`);
         console.log(`   Step: ${session.step}`);
         console.log(`   Business: ${session.businessId || 'ninguno'}`);
+        if (interactiveData) {
+            console.log(`   Interactive: ${JSON.stringify(interactiveData)}`);
+        }
+        
+        // MANEJAR BOTONES INTERACTIVOS (reserva rápida del LIVE)
+        if (interactiveData) {
+            return await this.handleInteractive(from, interactiveData, session);
+        }
         
         // COMANDOS GLOBALES
-        if (mensajeLower === 'inicio' || mensajeLower === 'home') {
+        if (mensajeLower === 'inicio' || mensajeLower === 'home' || mensajeLower === 'hola') {
             stateManager.resetSession(from);
             return await this.mostrarBienvenida(from);
         }
@@ -54,6 +63,19 @@ class MessageHandler {
             }
             stateManager.resetSession(from);
             return await this.mostrarMenuNegocio(from, session.businessId);
+        }
+        
+        // COMANDOS DE LIVE
+        if (mensajeLower === 'live 5' || mensajeLower === 'live5' || mensajeLower === '🔴 live 5 min') {
+            return await this.suscribirAlLive(from, 5);
+        }
+        
+        if (mensajeLower === 'live 10' || mensajeLower === 'live10' || mensajeLower === '🔴 live 10 min') {
+            return await this.suscribirAlLive(from, 10);
+        }
+        
+        if (mensajeLower === 'salir live' || mensajeLower === 'salir') {
+            return await this.salirDelLive(from);
         }
         
         // FLUJO PRINCIPAL
@@ -93,6 +115,201 @@ class MessageHandler {
         }
     }
     
+    // ========================================
+    // LIVE COMMERCE - SUSCRIPCIONES
+    // ========================================
+    
+    async suscribirAlLive(from, minutos) {
+        const session = stateManager.getSession(from);
+        let businessId = session.businessId;
+        
+        // Si no hay negocio seleccionado, usar el primero disponible
+        if (!businessId) {
+            const negocios = sheetsService.getBusinesses();
+            if (negocios.length > 0) {
+                businessId = negocios[0].id;
+                stateManager.setActiveBusiness(from, businessId);
+            } else {
+                return await whatsappService.sendMessage(from,
+                    `❌ No hay negocios disponibles en este momento.`
+                );
+            }
+        }
+        
+        const negocio = sheetsService.getBusiness(businessId);
+        const cliente = await sheetsService.findClient(businessId, from);
+        const nombreUsuario = cliente?.nombre || 'Usuario';
+        
+        liveManager.subscribe(businessId, from, nombreUsuario, minutos);
+        
+        const subscriberCount = liveManager.getSubscriberCount(businessId);
+        
+        let mensaje = `🔴 *¡ESTAS EN EL LIVE!*\n\n`;
+        mensaje += `📺 ${negocio.nombre}\n`;
+        mensaje += `⏱️ Duracion: ${minutos} minutos\n`;
+        mensaje += `👥 Conectados: ${subscriberCount} personas\n\n`;
+        mensaje += `Recibiras los productos en tiempo real.\n`;
+        mensaje += `Cuando veas algo que te gusta, toca *"🛒 ¡LO QUIERO!"* para apartarlo.\n\n`;
+        mensaje += `⚡ *¡El primero en tocar se lo lleva!*\n\n`;
+        mensaje += `_Escribe "salir" para desconectarte_`;
+        
+        stateManager.setStep(from, 'en_live');
+        
+        return await whatsappService.sendMessage(from, mensaje);
+    }
+    
+    async salirDelLive(from) {
+        const session = stateManager.getSession(from);
+        const businessId = session.businessId;
+        
+        if (businessId) {
+            liveManager.unsubscribe(businessId, from);
+        }
+        
+        stateManager.setStep(from, 'esperando_codigo');
+        
+        return await whatsappService.sendMessage(from,
+            `⚪ Saliste del LIVE.\n\n` +
+            `Puedes seguir comprando escribiendo codigos de productos, ` +
+            `o escribir *"live 5"* o *"live 10"* para volver a conectarte.`
+        );
+    }
+    
+    // ========================================
+    // LIVE COMMERCE - BOTONES INTERACTIVOS
+    // ========================================
+    
+    async handleInteractive(from, interactiveData, session) {
+        const buttonId = interactiveData.button_reply?.id || '';
+        const buttonTitle = interactiveData.button_reply?.title || '';
+        
+        console.log(`🔘 Boton presionado: ${buttonId} - ${buttonTitle}`);
+        
+        // Reserva rápida desde el LIVE: RESERVAR_BUSINESSID_CODIGO
+        if (buttonId.startsWith('RESERVAR_')) {
+            const parts = buttonId.split('_');
+            const businessId = parts[1];
+            const productCode = parts[2];
+            
+            return await this.procesarReservaRapida(from, businessId, productCode);
+        }
+        
+        // Botones del menú normal
+        const titleLower = buttonTitle.toLowerCase();
+        
+        if (titleLower === 'ver carrito') {
+            return await this.mostrarCarrito(from, session.businessId);
+        }
+        
+        if (titleLower === 'pagar') {
+            return await this.iniciarPago(from, session.businessId);
+        }
+        
+        if (titleLower === 'seguir comprando') {
+            return await this.mostrarMenuNegocio(from, session.businessId);
+        }
+        
+        if (titleLower === 'cambiar negocio') {
+            stateManager.setStep(from, 'seleccionar_negocio');
+            return await this.mostrarListaNegocios(from);
+        }
+        
+        if (titleLower === 'vaciar carrito') {
+            stateManager.clearCart(from, session.businessId);
+            return await whatsappService.sendMessage(from,
+                `🗑️ Carrito vaciado.\n\nEscribe un codigo de producto para comenzar.`
+            );
+        }
+        
+        if (titleLower === 'si, confirmar') {
+            const cliente = session.data?.cliente;
+            if (cliente) {
+                return await this.crearPedido(from, session.businessId, cliente);
+            }
+        }
+        
+        if (titleLower === 'editar datos') {
+            stateManager.setStep(from, 'datos_nombre');
+            return await whatsappService.sendMessage(from,
+                `📝 Vamos a actualizar tus datos.\n\n¿Cual es tu *nombre completo*?`
+            );
+        }
+        
+        if (titleLower.includes('live 5')) {
+            return await this.suscribirAlLive(from, 5);
+        }
+        
+        if (titleLower.includes('live 10')) {
+            return await this.suscribirAlLive(from, 10);
+        }
+        
+        // Selección de negocio por nombre
+        const negocios = sheetsService.getBusinesses();
+        const negocioMatch = negocios.find(n => 
+            n.nombre.toLowerCase() === titleLower
+        );
+        if (negocioMatch) {
+            stateManager.setActiveBusiness(from, negocioMatch.id);
+            return await this.mostrarMenuNegocio(from, negocioMatch.id);
+        }
+        
+        return await whatsappService.sendMessage(from, 
+            `No entendi esa opcion. Escribe *"inicio"* para ver el menu.`
+        );
+    }
+    
+    async procesarReservaRapida(from, businessId, productCode) {
+        const cliente = await sheetsService.findClient(businessId, from);
+        const nombreUsuario = cliente?.nombre || 'Usuario';
+        
+        // Intentar reservar (primero en llegar gana)
+        const resultado = liveManager.tryReserve(businessId, productCode, from, nombreUsuario);
+        
+        if (!resultado.success) {
+            // Ya fue reservado por otro usuario
+            return await whatsappService.sendMessage(from,
+                `${resultado.message}\n\n` +
+                `Sigue atento al LIVE, vienen mas productos! 👀`
+            );
+        }
+        
+        // ¡RESERVADO! Ahora reservar el stock real
+        const stockResult = await sheetsService.reserveStock(businessId, productCode, 1);
+        
+        if (!stockResult.success) {
+            // Error de stock, liberar la reserva del live
+            liveManager.clearLiveProduct(businessId, productCode);
+            return await whatsappService.sendMessage(from,
+                `❌ El producto ya no tiene stock disponible.\n\n` +
+                `Sigue atento al LIVE! 👀`
+            );
+        }
+        
+        // Agregar al carrito
+        stateManager.setActiveBusiness(from, businessId);
+        stateManager.addToCart(from, businessId, {
+            codigo: resultado.producto.codigo,
+            nombre: resultado.producto.nombre,
+            cantidad: 1,
+            precio: resultado.producto.precio
+        });
+        
+        const cart = stateManager.getCart(from, businessId);
+        const cartTotal = stateManager.getCartTotal(from, businessId);
+        
+        let mensaje = `🎉 *¡LO APARTASTE!*\n\n`;
+        mensaje += `✅ ${resultado.producto.nombre}\n`;
+        mensaje += `💰 S/${resultado.producto.precio.toFixed(2)}\n\n`;
+        mensaje += `🛒 Tu carrito: ${cart.length} producto(s)\n`;
+        mensaje += `💵 Total: S/${cartTotal.toFixed(2)}\n\n`;
+        mensaje += `Sigue en el LIVE o escribe *"pagar"* cuando termines.`;
+        
+        return await whatsappService.sendButtonMessage(from, mensaje, [
+            { title: 'Pagar ahora' },
+            { title: 'Seguir en el LIVE' }
+        ]);
+    }
+    
     // BIENVENIDA Y SELECCION DE NEGOCIO
     
     async mostrarBienvenida(from) {
@@ -110,7 +327,7 @@ class MessageHandler {
             const negocio = negocios[0];
             stateManager.setActiveBusiness(from, negocio.id);
             stateManager.subscribe(from, negocio.id);
-            return await this.mostrarMenuNegocio(from, negocio.id);
+            return await this.mostrarMenuNegocioConLive(from, negocio.id);
         }
         
         stateManager.setStep(from, 'seleccionar_negocio');
@@ -165,12 +382,12 @@ class MessageHandler {
         stateManager.setActiveBusiness(from, negocioSeleccionado.id);
         stateManager.subscribe(from, negocioSeleccionado.id);
         
-        return await this.mostrarMenuNegocio(from, negocioSeleccionado.id);
+        return await this.mostrarMenuNegocioConLive(from, negocioSeleccionado.id);
     }
     
-    // MENU DEL NEGOCIO
+    // MENU DEL NEGOCIO CON OPCION LIVE
     
-    async mostrarMenuNegocio(from, businessId) {
+    async mostrarMenuNegocioConLive(from, businessId) {
         const negocio = sheetsService.getBusiness(businessId);
         if (!negocio) {
             return await this.mostrarBienvenida(from);
@@ -178,25 +395,41 @@ class MessageHandler {
         
         const cart = stateManager.getCart(from, businessId);
         const cartTotal = stateManager.getCartTotal(from, businessId);
+        const isSubscribed = liveManager.isSubscribed(businessId, from);
+        const subscriberCount = liveManager.getSubscriberCount(businessId);
         
         let mensaje = `🏪 *${negocio.nombre}*\n\n`;
+        
+        if (isSubscribed) {
+            mensaje += `🔴 *Estas conectado al LIVE*\n`;
+            mensaje += `👥 ${subscriberCount} personas conectadas\n\n`;
+        }
         
         if (cart.length > 0) {
             mensaje += `🛒 Tienes *${cart.length} producto(s)* en tu carrito\n`;
             mensaje += `💰 Total: *S/${cartTotal.toFixed(2)}*\n\n`;
         }
         
-        mensaje += `*Viste algo en el live?*\n`;
-        mensaje += `Escribe el codigo del producto para reservarlo.\n\n`;
-        mensaje += `_Ejemplo: ${negocio.prefijo}01_`;
+        mensaje += `📺 *¿Hay un LIVE activo?*\n`;
+        mensaje += `Suscribete para recibir productos en tiempo real!\n\n`;
+        mensaje += `⏱️ Elige cuanto tiempo quieres estar conectado:`;
         
-        stateManager.setStep(from, 'esperando_codigo');
+        stateManager.setStep(from, 'menu_negocio');
         
-        const botones = cart.length > 0 
-            ? [{ title: 'Ver carrito' }, { title: 'Pagar' }, { title: 'Cambiar negocio' }]
-            : [{ title: 'Cambiar negocio' }];
+        const botones = [
+            { title: '🔴 LIVE 5 min' },
+            { title: '🔴 LIVE 10 min' }
+        ];
+        
+        if (cart.length > 0) {
+            botones.push({ title: 'Ver carrito' });
+        }
         
         return await whatsappService.sendButtonMessage(from, mensaje, botones);
+    }
+    
+    async mostrarMenuNegocio(from, businessId) {
+        return await this.mostrarMenuNegocioConLive(from, businessId);
     }
     
     async procesarMenuNegocio(from, mensaje) {
