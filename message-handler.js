@@ -205,7 +205,15 @@ class MessageHandler {
         // Botones del menu normal (usar titulo)
         const titleLower = buttonTitle.toLowerCase();
         
-        if (titleLower === 'ver carrito' || titleLower === 'carrito') {
+        if (titleLower === 'ver carrito' || titleLower === 'carrito' || titleLower === 'ver pedido') {
+            // Ver el pedido activo
+            const pedidoId = stateManager.getActivePedido(from);
+            if (pedidoId && session.businessId) {
+                const pedido = await sheetsService.getOrderById(session.businessId, pedidoId);
+                if (pedido) {
+                    return await this.mostrarDetallePedido(from, session.businessId, pedido);
+                }
+            }
             return await this.mostrarCarrito(from, session.businessId);
         }
         
@@ -226,6 +234,12 @@ class MessageHandler {
             stateManager.clearCart(from, session.businessId);
             return await whatsappService.sendMessage(from,
                 'Carrito vaciado.\n\nEscribe un codigo de producto para comenzar.'
+            );
+        }
+        
+        if (titleLower === 'enviar comprobante' || titleLower === 'enviar voucher') {
+            return await whatsappService.sendMessage(from,
+                '📸 Perfecto!\n\nEnvia la foto o captura de tu comprobante de pago.'
             );
         }
         
@@ -293,48 +307,88 @@ class MessageHandler {
             );
         }
         
-        // CREAR PEDIDO INMEDIATAMENTE en el Excel
-        const pedidoData = {
-            whatsapp: from,
-            cliente: cliente?.nombre || nombreUsuario,
-            telefono: cliente?.telefono || '',
-            direccion: cliente?.direccion || '',
-            items: [{
+        // Limpiar producto del live
+        liveManager.clearLiveProduct(businessId, productCode);
+        
+        // Verificar si ya tiene un pedido activo
+        let pedidoId = stateManager.getActivePedido(from);
+        let esNuevoPedido = false;
+        
+        if (!pedidoId) {
+            // CREAR NUEVO PEDIDO con el primer producto
+            esNuevoPedido = true;
+            const pedidoData = {
+                whatsapp: from,
+                cliente: cliente?.nombre || nombreUsuario,
+                telefono: cliente?.telefono || '',
+                direccion: cliente?.direccion || '',
+                items: [{
+                    codigo: resultado.producto.codigo,
+                    nombre: resultado.producto.nombre,
+                    cantidad: 1,
+                    precio: resultado.producto.precio,
+                    subtotal: resultado.producto.precio
+                }],
+                total: resultado.producto.precio
+            };
+            
+            const pedidoResult = await sheetsService.createOrder(businessId, pedidoData);
+            
+            if (!pedidoResult.success) {
+                // Si falla crear pedido, liberar stock
+                await sheetsService.releaseStock(businessId, productCode, 1);
+                return await whatsappService.sendMessage(from,
+                    '❌ Error al procesar tu reserva. Intenta nuevamente.'
+                );
+            }
+            
+            pedidoId = pedidoResult.pedidoId;
+            stateManager.setActivePedido(from, businessId, pedidoId);
+            
+        } else {
+            // AGREGAR PRODUCTO al pedido existente
+            const addResult = await sheetsService.addProductToOrder(businessId, pedidoId, {
                 codigo: resultado.producto.codigo,
                 nombre: resultado.producto.nombre,
                 cantidad: 1,
-                precio: resultado.producto.precio,
-                subtotal: resultado.producto.precio
-            }],
-            total: resultado.producto.precio
-        };
-        
-        const pedidoResult = await sheetsService.createOrder(businessId, pedidoData);
-        
-        if (!pedidoResult.success) {
-            // Si falla crear pedido, liberar stock
-            await sheetsService.releaseStock(businessId, productCode, 1);
-            liveManager.clearLiveProduct(businessId, productCode);
-            return await whatsappService.sendMessage(from,
-                '❌ Error al procesar tu reserva. Intenta nuevamente.'
-            );
+                precio: resultado.producto.precio
+            });
+            
+            if (!addResult.success) {
+                // Si falla agregar, liberar stock
+                await sheetsService.releaseStock(businessId, productCode, 1);
+                return await whatsappService.sendMessage(from,
+                    '❌ Error al agregar el producto. Intenta nuevamente.'
+                );
+            }
         }
         
-        // Limpiar producto del live
-        liveManager.clearLiveProduct(businessId, productCode);
+        // Obtener pedido actualizado
+        const pedido = await sheetsService.getOrderById(businessId, pedidoId);
+        const numProductos = pedido.productos.split('|').length;
         
         let mensaje = '✅ ¡LO APARTASTE!\n\n';
         mensaje += resultado.producto.nombre + '\n';
         mensaje += 'S/' + resultado.producto.precio.toFixed(2) + '\n\n';
-        mensaje += '📦 Pedido: ' + pedidoResult.pedidoId + '\n';
-        mensaje += 'Estado: PENDIENTE_PAGO\n\n';
-        mensaje += '💳 Realiza tu pago y envia el voucher para confirmar tu pedido.';
         
-        stateManager.setStep(from, 'esperando_voucher', { 
-            pedidoId: pedidoResult.pedidoId 
-        });
+        if (esNuevoPedido) {
+            mensaje += '📦 Pedido creado: ' + pedidoId + '\n';
+        } else {
+            mensaje += '📦 Agregado al pedido: ' + pedidoId + '\n';
+        }
         
-        return await whatsappService.sendMessage(from, mensaje);
+        mensaje += '🛒 Productos en tu pedido: ' + numProductos + '\n';
+        mensaje += 'Total: S/' + pedido.total.toFixed(2) + '\n\n';
+        mensaje += '⏰ Tienes 30 minutos para pagar\n\n';
+        mensaje += '¿Que deseas hacer?';
+        
+        stateManager.setStep(from, 'esperando_codigo');
+        
+        return await whatsappService.sendButtonMessage(from, mensaje, [
+            { title: 'Seguir en LIVE', id: 'seguir' },
+            { title: 'Pagar ahora', id: 'pagar' },
+            { title: 'Ver pedido', id: 'ver_pedido' }
+        ]);
     }
     
     // BIENVENIDA Y SELECCION DE NEGOCIO
@@ -514,6 +568,8 @@ class MessageHandler {
     }
     
     async mostrarDetallePedido(from, businessId, pedido) {
+        const negocio = sheetsService.getBusiness(businessId);
+        
         let mensaje = '📦 DETALLE DEL PEDIDO\n\n';
         mensaje += 'Codigo: ' + pedido.id + '\n';
         mensaje += 'Estado: ' + this.formatearEstado(pedido.estado) + '\n';
@@ -533,8 +589,29 @@ class MessageHandler {
         }
         
         if (pedido.estado === 'PENDIENTE_PAGO') {
-            mensaje += '💳 Envia tu voucher de pago para confirmar el pedido.';
+            mensaje += '💳 CUENTAS PARA PAGAR:\n\n';
+            
+            // Mostrar cuentas bancarias del negocio
+            if (negocio.cuentasBancarias) {
+                const cuentas = negocio.cuentasBancarias.split('|');
+                cuentas.forEach(cuenta => {
+                    const [banco, numero] = cuenta.split(':');
+                    mensaje += '🏦 ' + banco + '\n';
+                    mensaje += '   ' + numero + '\n\n';
+                });
+            } else {
+                mensaje += 'Contacta al vendedor para datos de pago\n\n';
+            }
+            
+            mensaje += '⏰ Tienes 30 minutos para completar el pago';
+            
             stateManager.setStep(from, 'esperando_voucher', { pedidoId: pedido.id });
+            
+            // Botón para enviar comprobante
+            return await whatsappService.sendButtonMessage(from, mensaje, [
+                { title: 'Enviar comprobante', id: 'enviar_voucher' }
+            ]);
+            
         } else if (pedido.estado === 'PENDIENTE_VALIDACION') {
             mensaje += '⏳ Tu voucher esta siendo validado. Te notificaremos pronto.';
         } else {
@@ -884,6 +961,9 @@ class MessageHandler {
             'PENDIENTE_VALIDACION',
             mediaUrl
         );
+        
+        // Limpiar el pedido activo ya que se envió el voucher
+        stateManager.clearActivePedido(from);
         
         stateManager.setStep(from, 'esperando_codigo');
         

@@ -77,6 +77,8 @@ Bot: "✅ ¡Reservada!
 | E | Descripcion | Descripción corta |
 | F | Logo_URL | URL del logo (opcional) |
 | G | Estado | ACTIVO / INACTIVO |
+| H | WhatsAppNumber | Número de WhatsApp del negocio |
+| I | CuentasBancarias | Números de cuenta (formato: Banco:Numero|Banco:Numero) |
 
 ### Spreadsheet POR NEGOCIO
 
@@ -217,15 +219,19 @@ NODE_ENV=development
    ↓
 7. Cliente presiona "ApartaLo" (el primero gana)
    ↓
-8. ✅ Pedido creado INMEDIATAMENTE en Excel
+8. ✅ PRIMER PRODUCTO: Se crea pedido en Excel
    ↓
-9. Cliente recibe código de pedido (ej: PL-123456)
+9. ✅ MÁS PRODUCTOS: Se agregan al mismo pedido
    ↓
-10. Cliente envía voucher de pago
+10. Cliente decide cuándo pagar (tiene 30 min)
     ↓
-11. Pedido cambia a "PENDIENTE_VALIDACION"
+11. Al presionar "Pagar ahora" ve las cuentas bancarias
     ↓
-12. Admin valida y confirma pedido
+12. Cliente envía voucher con el botón "Enviar comprobante"
+    ↓
+13. Pedido cambia a "PENDIENTE_VALIDACION"
+    ↓
+14. Admin valida y confirma pedido
 ```
 
 ### Consulta de Pedidos (Nuevo en v1.3)

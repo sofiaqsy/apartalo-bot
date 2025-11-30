@@ -60,10 +60,10 @@ class SheetsService {
     
     async loadBusinesses() {
         try {
-            // Rango extendido para incluir columna H (whatsappNumber)
+            // Rango extendido para incluir columna I (cuentasBancarias)
             const response = await this.sheets.spreadsheets.values.get({
                 spreadsheetId: this.masterSpreadsheetId,
-                range: 'Negocios!A:H'
+                range: 'Negocios!A:I'
             });
             
             const rows = response.data.values || [];
@@ -76,6 +76,7 @@ class SheetsService {
                 
                 if (estado === 'ACTIVO') {
                     const whatsappNumber = (row[7] || '').replace(/[^0-9]/g, '');
+                    const cuentasBancarias = row[8] || '';
                     
                     const business = {
                         id: row[0] || '',
@@ -85,7 +86,8 @@ class SheetsService {
                         descripcion: row[4] || '',
                         logoUrl: row[5] || '',
                         estado: estado,
-                        whatsappNumber: whatsappNumber
+                        whatsappNumber: whatsappNumber,
+                        cuentasBancarias: cuentasBancarias
                     };
                     
                     this.businessCache.set(business.id, business);
@@ -573,6 +575,49 @@ class SheetsService {
             
         } catch (error) {
             console.error('❌ Error actualizando observaciones:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+    
+    async addProductToOrder(businessId, pedidoId, newItem) {
+        const business = this.getBusiness(businessId);
+        if (!business) return { success: false, error: 'Negocio no encontrado' };
+        
+        try {
+            const pedido = await this.getOrderById(businessId, pedidoId);
+            if (!pedido) {
+                return { success: false, error: 'Pedido no encontrado' };
+            }
+            
+            // Parsear productos actuales
+            const productosActuales = pedido.productos ? pedido.productos.split('|') : [];
+            
+            // Agregar nuevo producto
+            const nuevoProducto = `${newItem.codigo}:${newItem.nombre}:${newItem.cantidad}:${newItem.precio}`;
+            productosActuales.push(nuevoProducto);
+            
+            // Calcular nuevo total
+            const nuevoTotal = pedido.total + (newItem.cantidad * newItem.precio);
+            
+            // Actualizar en Excel
+            const updates = [
+                { range: `Pedidos!H${pedido.rowIndex}`, values: [[productosActuales.join('|')]] },
+                { range: `Pedidos!I${pedido.rowIndex}`, values: [[nuevoTotal]] }
+            ];
+            
+            await this.sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId: business.spreadsheetId,
+                resource: {
+                    data: updates,
+                    valueInputOption: 'USER_ENTERED'
+                }
+            });
+            
+            console.log(`✅ Producto agregado al pedido ${pedidoId}: ${newItem.nombre}`);
+            return { success: true, pedidoId, nuevoTotal };
+            
+        } catch (error) {
+            console.error('❌ Error agregando producto al pedido:', error.message);
             return { success: false, error: error.message };
         }
     }

@@ -161,6 +161,29 @@ class StateManager {
     }
     
     // ========================================
+    // PEDIDO ACTIVO (para agregar productos)
+    // ========================================
+    
+    setActivePedido(phoneNumber, businessId, pedidoId) {
+        const session = this.getSession(phoneNumber);
+        this.setSession(phoneNumber, {
+            ...session,
+            activePedidoId: pedidoId
+        });
+    }
+    
+    getActivePedido(phoneNumber) {
+        const session = this.getSession(phoneNumber);
+        return session.activePedidoId || null;
+    }
+    
+    clearActivePedido(phoneNumber) {
+        const session = this.getSession(phoneNumber);
+        delete session.activePedidoId;
+        this.setSession(phoneNumber, session);
+    }
+    
+    // ========================================
     // UTILIDADES
     // ========================================
     
