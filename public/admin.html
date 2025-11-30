@@ -16,6 +16,7 @@
             --bg-dark: #0f0f1a; --bg-card: #1a1a2e; --bg-input: #252540;
             --text: #ffffff; --text-muted: #9ca3af;
             --danger: #ef4444; --warning: #f59e0b; --info: #3b82f6; --success: #22c55e;
+            --live: #ef4444;
         }
         body { font-family: 'Inter', sans-serif; background: var(--bg-dark); color: var(--text); min-height: 100vh; padding-bottom: 80px; }
         .header { background: var(--bg-card); padding: 16px; position: sticky; top: 0; z-index: 100; border-bottom: 1px solid #2a2a4a; }
@@ -24,8 +25,9 @@
         .logo span { color: var(--text); }
         .business-select { width: 100%; padding: 12px; background: var(--bg-input); border: 1px solid #3a3a5a; border-radius: 8px; color: var(--text); font-size: 1rem; }
         .bottom-nav { position: fixed; bottom: 0; left: 0; right: 0; background: var(--bg-card); display: flex; justify-content: space-around; padding: 8px 0; border-top: 1px solid #2a2a4a; z-index: 100; }
-        .nav-item { display: flex; flex-direction: column; align-items: center; padding: 8px 16px; color: var(--text-muted); text-decoration: none; font-size: 0.75rem; transition: color 0.2s; cursor: pointer; }
+        .nav-item { display: flex; flex-direction: column; align-items: center; padding: 8px 12px; color: var(--text-muted); text-decoration: none; font-size: 0.7rem; transition: color 0.2s; cursor: pointer; }
         .nav-item.active { color: var(--primary); }
+        .nav-item.live-active { color: var(--live); }
         .nav-item svg { width: 24px; height: 24px; margin-bottom: 4px; }
         .content { padding: 16px; }
         .tab-content { display: none; }
@@ -37,6 +39,8 @@
         .stat-card { background: var(--bg-card); border-radius: 12px; padding: 16px; text-align: center; }
         .stat-value { font-size: 2rem; font-weight: 700; color: var(--primary); }
         .stat-label { font-size: 0.875rem; color: var(--text-muted); }
+        .stat-card.live { border: 2px solid var(--live); }
+        .stat-card.live .stat-value { color: var(--live); }
         .product-item { display: flex; align-items: center; padding: 12px; background: var(--bg-input); border-radius: 8px; margin-bottom: 8px; }
         .product-info { flex: 1; }
         .product-name { font-weight: 600; margin-bottom: 4px; }
@@ -67,7 +71,10 @@
         .btn-primary:hover { background: var(--primary-dark); }
         .btn-secondary { background: var(--bg-input); color: var(--text); }
         .btn-danger { background: var(--danger); color: white; }
+        .btn-live { background: var(--live); color: white; animation: pulse 2s infinite; }
         .btn-block { width: 100%; }
+        .btn-sm { padding: 8px 16px; font-size: 0.875rem; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
         .fab { position: fixed; bottom: 90px; right: 16px; width: 56px; height: 56px; background: var(--primary); border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(74, 222, 128, 0.3); cursor: pointer; z-index: 99; }
         .fab svg { width: 24px; height: 24px; color: #000; }
         .modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.8); display: none; align-items: flex-end; z-index: 200; }
@@ -80,7 +87,6 @@
         .form-label { display: block; margin-bottom: 8px; font-weight: 500; color: var(--text-muted); }
         .form-input { width: 100%; padding: 12px; background: var(--bg-input); border: 1px solid #3a3a5a; border-radius: 8px; color: var(--text); font-size: 1rem; }
         .form-input:focus { outline: none; border-color: var(--primary); }
-        .form-input:disabled { opacity: 0.6; }
         .status-select { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin-top: 12px; }
         .status-option { padding: 12px; border-radius: 8px; text-align: center; font-size: 0.75rem; font-weight: 600; cursor: pointer; border: 2px solid transparent; transition: all 0.2s; }
         .status-option.selected { border-color: var(--primary); }
@@ -88,7 +94,6 @@
         .spinner { width: 40px; height: 40px; border: 3px solid var(--bg-input); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s linear infinite; margin: 0 auto 16px; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .empty-state { text-align: center; padding: 40px; color: var(--text-muted); }
-        .empty-state svg { width: 64px; height: 64px; margin-bottom: 16px; opacity: 0.5; }
         .toast { position: fixed; bottom: 100px; left: 50%; transform: translateX(-50%); background: var(--bg-card); padding: 12px 24px; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.3); z-index: 300; display: none; }
         .toast.success { border-left: 4px solid var(--success); }
         .toast.error { border-left: 4px solid var(--danger); }
@@ -103,6 +108,32 @@
         .refresh-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 8px; }
         .refresh-btn.loading svg { animation: spin 1s linear infinite; }
         .code-badge { background: var(--primary); color: #000; padding: 8px 16px; border-radius: 8px; font-weight: 600; font-size: 1rem; display: inline-block; margin-bottom: 16px; }
+        
+        /* LIVE COMMERCE STYLES */
+        .live-header { background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%); border-radius: 12px; padding: 20px; margin-bottom: 16px; text-align: center; }
+        .live-header h2 { font-size: 1.5rem; margin-bottom: 8px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+        .live-dot { width: 12px; height: 12px; background: white; border-radius: 50%; animation: pulse 1s infinite; }
+        .live-stats { display: flex; justify-content: center; gap: 24px; margin-top: 12px; }
+        .live-stat { text-align: center; }
+        .live-stat-value { font-size: 1.5rem; font-weight: 700; }
+        .live-stat-label { font-size: 0.75rem; opacity: 0.9; }
+        .live-product-item { display: flex; align-items: center; padding: 16px; background: var(--bg-input); border-radius: 12px; margin-bottom: 12px; }
+        .live-product-img { width: 60px; height: 60px; background: var(--bg-card); border-radius: 8px; margin-right: 12px; object-fit: cover; }
+        .live-product-info { flex: 1; }
+        .live-product-name { font-weight: 600; font-size: 1rem; margin-bottom: 4px; }
+        .live-product-price { color: var(--primary); font-weight: 700; }
+        .live-product-stock { font-size: 0.875rem; color: var(--text-muted); }
+        .btn-broadcast { background: var(--live); color: white; padding: 10px 20px; border-radius: 8px; font-weight: 600; border: none; cursor: pointer; display: flex; align-items: center; gap: 8px; }
+        .btn-broadcast:hover { background: #dc2626; }
+        .btn-broadcast:disabled { opacity: 0.5; cursor: not-allowed; }
+        .subscriber-list { max-height: 200px; overflow-y: auto; }
+        .subscriber-item { display: flex; align-items: center; padding: 8px; background: var(--bg-input); border-radius: 8px; margin-bottom: 8px; }
+        .subscriber-avatar { width: 36px; height: 36px; background: var(--live); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 600; margin-right: 12px; font-size: 0.875rem; }
+        .subscriber-info { flex: 1; }
+        .subscriber-name { font-weight: 500; font-size: 0.875rem; }
+        .subscriber-time { font-size: 0.75rem; color: var(--text-muted); }
+        .live-product-sent { border: 2px solid var(--live); position: relative; }
+        .live-product-sent::after { content: '✓ ENVIADO'; position: absolute; top: 8px; right: 8px; background: var(--live); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem; font-weight: 600; }
     </style>
 </head>
 <body>
@@ -119,12 +150,13 @@
     </header>
     
     <main class="content">
+        <!-- TAB: Dashboard -->
         <div id="tab-dashboard" class="tab-content active">
             <div class="stats-grid">
                 <div class="stat-card"><div class="stat-value" id="stat-products">-</div><div class="stat-label">Productos</div></div>
                 <div class="stat-card"><div class="stat-value" id="stat-orders">-</div><div class="stat-label">Pedidos Hoy</div></div>
                 <div class="stat-card"><div class="stat-value" id="stat-pending">-</div><div class="stat-label">Pendientes</div></div>
-                <div class="stat-card"><div class="stat-value" id="stat-clients">-</div><div class="stat-label">Clientes</div></div>
+                <div class="stat-card live"><div class="stat-value" id="stat-live">0</div><div class="stat-label">🔴 En LIVE</div></div>
             </div>
             <div class="card">
                 <div class="card-header"><span class="card-title">📋 Últimos Pedidos</span></div>
@@ -132,6 +164,40 @@
             </div>
         </div>
         
+        <!-- TAB: LIVE Commerce -->
+        <div id="tab-live" class="tab-content">
+            <div class="live-header">
+                <h2><span class="live-dot"></span> MODO LIVE</h2>
+                <p>Envía productos a los usuarios conectados</p>
+                <div class="live-stats">
+                    <div class="live-stat">
+                        <div class="live-stat-value" id="live-subscribers">0</div>
+                        <div class="live-stat-label">Conectados</div>
+                    </div>
+                    <div class="live-stat">
+                        <div class="live-stat-value" id="live-sent">0</div>
+                        <div class="live-stat-label">Enviados</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <span class="card-title">👥 Usuarios Conectados</span>
+                    <button class="btn btn-sm btn-secondary" onclick="refreshLiveStats()">↻</button>
+                </div>
+                <div id="subscribers-list" class="subscriber-list">
+                    <div class="empty-state"><p>No hay usuarios conectados</p></div>
+                </div>
+            </div>
+            
+            <div class="card">
+                <div class="card-header"><span class="card-title">📦 Productos Disponibles</span></div>
+                <div id="live-products-list"><div class="loading"><div class="spinner"></div>Cargando productos...</div></div>
+            </div>
+        </div>
+        
+        <!-- TAB: Products -->
         <div id="tab-products" class="tab-content">
             <div class="search-box">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -140,6 +206,7 @@
             <div id="products-list"><div class="loading"><div class="spinner"></div>Cargando productos...</div></div>
         </div>
         
+        <!-- TAB: Orders -->
         <div id="tab-orders" class="tab-content">
             <div class="filters" id="order-filters">
                 <div class="filter-chip active" data-filter="all">Todos</div>
@@ -147,11 +214,11 @@
                 <div class="filter-chip" data-filter="PENDIENTE_VALIDACION">🔍 Validar</div>
                 <div class="filter-chip" data-filter="CONFIRMADO">✅ Confirmado</div>
                 <div class="filter-chip" data-filter="EN_PREPARACION">📦 Preparando</div>
-                <div class="filter-chip" data-filter="ENVIADO">🚚 Enviado</div>
             </div>
             <div id="orders-list"><div class="loading"><div class="spinner"></div>Cargando pedidos...</div></div>
         </div>
         
+        <!-- TAB: Clients -->
         <div id="tab-clients" class="tab-content">
             <div class="search-box">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
@@ -169,14 +236,17 @@
         <div class="nav-item active" data-tab="dashboard">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>Inicio
         </div>
+        <div class="nav-item" data-tab="live">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="3" fill="currentColor"/></svg>LIVE
+        </div>
         <div class="nav-item" data-tab="products">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 01-8 0"/></svg>Productos
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/></svg>Productos
         </div>
         <div class="nav-item" data-tab="orders">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>Pedidos
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14,2 14,8 20,8"/></svg>Pedidos
         </div>
         <div class="nav-item" data-tab="clients">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>Clientes
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>Clientes
         </div>
     </nav>
     
@@ -246,7 +316,9 @@
     <div class="toast" id="toast"></div>
     
     <script>
-        let currentBusiness = null, businesses = [], products = [], orders = [], clients = [], currentOrder = null, selectedStatus = null;
+        let currentBusiness = null, businesses = [], products = [], orders = [], clients = [];
+        let currentOrder = null, selectedStatus = null;
+        let liveStats = { subscribers: [], products: [] }, sentProducts = new Set();
         const API_BASE = '/api';
         const ESTADOS = [
             { id: 'PENDIENTE_PAGO', label: '💰 Pago Pendiente' },
@@ -257,7 +329,7 @@
             { id: 'ENTREGADO', label: '🎉 Entregado' }
         ];
         
-        async function init() { await loadBusinesses(); setupNavigation(); setupFilters(); registerSW(); }
+        async function init() { await loadBusinesses(); setupNavigation(); setupFilters(); registerSW(); setInterval(refreshLiveStats, 10000); }
         function registerSW() { if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e => console.log(e)); }
         
         async function api(endpoint, options = {}) {
@@ -277,8 +349,8 @@
             }
         }
         
-        function changeBusiness() { currentBusiness = document.getElementById('businessSelect').value; loadAllData(); }
-        async function loadAllData() { if (!currentBusiness) return; await Promise.all([loadProducts(), loadOrders(), loadClients(), loadStats()]); }
+        function changeBusiness() { currentBusiness = document.getElementById('businessSelect').value; loadAllData(); sentProducts.clear(); }
+        async function loadAllData() { if (!currentBusiness) return; await Promise.all([loadProducts(), loadOrders(), loadClients(), loadStats(), refreshLiveStats()]); }
         async function refreshData() { document.querySelector('.refresh-btn').classList.add('loading'); await loadAllData(); document.querySelector('.refresh-btn').classList.remove('loading'); showToast('Datos actualizados', 'success'); }
         
         async function loadStats() {
@@ -288,24 +360,109 @@
                 document.getElementById('stat-pending').textContent = (stats.data.porEstado?.PENDIENTE_PAGO || 0) + (stats.data.porEstado?.PENDIENTE_VALIDACION || 0);
             }
             document.getElementById('stat-products').textContent = products.length;
-            document.getElementById('stat-clients').textContent = clients.length;
         }
         
-        async function loadProducts() { const data = await api(`/${currentBusiness}/productos`); if (data.success) { products = data.data; renderProducts(); } }
+        async function loadProducts() { const data = await api(`/${currentBusiness}/productos`); if (data.success) { products = data.data; renderProducts(); renderLiveProducts(); } }
         async function loadOrders() { const data = await api(`/${currentBusiness}/pedidos`); if (data.success) { orders = data.data; renderOrders(); renderRecentOrders(); } }
         async function loadClients() { const data = await api(`/${currentBusiness}/clientes`); if (data.success) { clients = data.data; renderClients(); } }
         
+        // ========== LIVE COMMERCE ==========
+        async function refreshLiveStats() {
+            if (!currentBusiness) return;
+            const data = await api(`/${currentBusiness}/live/stats`);
+            if (data.success) {
+                liveStats = data.data;
+                document.getElementById('live-subscribers').textContent = liveStats.subscriberCount || 0;
+                document.getElementById('stat-live').textContent = liveStats.subscriberCount || 0;
+                document.getElementById('live-sent').textContent = liveStats.liveProductCount || 0;
+                renderSubscribers();
+                
+                // Actualizar icono del tab LIVE si hay suscritos
+                const liveTab = document.querySelector('.nav-item[data-tab="live"]');
+                if (liveStats.subscriberCount > 0) {
+                    liveTab.classList.add('live-active');
+                } else {
+                    liveTab.classList.remove('live-active');
+                }
+            }
+        }
+        
+        function renderSubscribers() {
+            const list = document.getElementById('subscribers-list');
+            const subs = liveStats.subscribers || [];
+            if (subs.length === 0) {
+                list.innerHTML = '<div class="empty-state"><p>No hay usuarios conectados</p><p style="font-size:0.875rem;margin-top:8px">Los usuarios pueden escribir "live 5" o "live 10" al bot</p></div>';
+                return;
+            }
+            list.innerHTML = subs.map(s => {
+                const remaining = Math.max(0, Math.floor(s.remainingMs / 1000 / 60));
+                return `<div class="subscriber-item"><div class="subscriber-avatar">${(s.nombre || 'U')[0]}</div><div class="subscriber-info"><div class="subscriber-name">${s.nombre || 'Usuario'}</div><div class="subscriber-time">⏱️ ${remaining} min restantes</div></div></div>`;
+            }).join('');
+        }
+        
+        function renderLiveProducts() {
+            const list = document.getElementById('live-products-list');
+            const available = products.filter(p => p.disponible > 0 && p.estado === 'ACTIVO');
+            if (available.length === 0) {
+                list.innerHTML = '<div class="empty-state"><p>No hay productos disponibles</p></div>';
+                return;
+            }
+            list.innerHTML = available.map(p => {
+                const isSent = sentProducts.has(p.codigo);
+                return `<div class="live-product-item ${isSent ? 'live-product-sent' : ''}" id="live-product-${p.codigo}">
+                    ${p.imagenUrl ? `<img src="${p.imagenUrl}" class="live-product-img" onerror="this.style.display='none'">` : '<div class="live-product-img"></div>'}
+                    <div class="live-product-info">
+                        <div class="live-product-name">${p.codigo} - ${p.nombre}</div>
+                        <div class="live-product-price">S/${p.precio.toFixed(2)}</div>
+                        <div class="live-product-stock">${p.disponible} disponible(s)</div>
+                    </div>
+                    <button class="btn-broadcast" onclick="broadcastProduct('${p.codigo}')" ${isSent ? 'disabled' : ''}>
+                        ${isSent ? '✓ Enviado' : '📢 Enviar'}
+                    </button>
+                </div>`;
+            }).join('');
+        }
+        
+        async function broadcastProduct(codigo) {
+            const subscriberCount = liveStats.subscriberCount || 0;
+            if (subscriberCount === 0) {
+                showToast('No hay usuarios conectados al LIVE', 'error');
+                return;
+            }
+            
+            if (!confirm(`¿Enviar ${codigo} a ${subscriberCount} usuario(s)?`)) return;
+            
+            const btn = document.querySelector(`#live-product-${codigo} .btn-broadcast`);
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Enviando...';
+            
+            const result = await api(`/${currentBusiness}/live/broadcast/${codigo}`, { method: 'POST' });
+            
+            if (result.success) {
+                sentProducts.add(codigo);
+                showToast(`✅ Enviado a ${result.data.enviados} usuarios`, 'success');
+                renderLiveProducts();
+                await refreshLiveStats();
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = '📢 Enviar';
+                showToast(result.error || 'Error al enviar', 'error');
+            }
+        }
+        
+        // ========== PRODUCTS ==========
         function renderProducts(filtered = null) {
             const list = document.getElementById('products-list');
             const data = filtered || products;
-            if (data.length === 0) { list.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4z"/></svg><p>No hay productos</p></div>'; return; }
+            if (data.length === 0) { list.innerHTML = '<div class="empty-state"><p>No hay productos</p></div>'; return; }
             list.innerHTML = data.map(p => `<div class="product-item" onclick="editProduct('${p.codigo}')"><div class="product-info"><div class="product-name">${p.codigo} - ${p.nombre}</div><div class="product-meta">${p.descripcion || 'Sin descripción'}</div></div><span class="product-price">S/${p.precio.toFixed(2)}</span><span class="product-stock ${p.disponible < 3 ? 'stock-low' : ''}">${p.disponible} disp.</span></div>`).join('');
         }
         
+        // ========== ORDERS ==========
         function renderOrders(filter = 'all') {
             const list = document.getElementById('orders-list');
             let data = filter !== 'all' ? orders.filter(o => o.estado === filter) : orders;
-            if (data.length === 0) { list.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/></svg><p>No hay pedidos</p></div>'; return; }
+            if (data.length === 0) { list.innerHTML = '<div class="empty-state"><p>No hay pedidos</p></div>'; return; }
             list.innerHTML = data.map(o => `<div class="order-item" onclick="openOrder('${o.id}')"><div class="order-header"><span class="order-id">${o.id}</span><span class="order-status status-${o.estado}">${o.estado.replace(/_/g, ' ')}</span></div><div class="order-details"><div>👤 ${o.cliente || 'Sin nombre'}</div><div>📱 ${o.whatsapp}</div><div>📅 ${o.fecha} ${o.hora}</div></div><div class="order-total">S/${o.total.toFixed(2)}</div></div>`).join('');
         }
         
@@ -316,13 +473,15 @@
             container.innerHTML = recent.map(o => `<div class="order-item" onclick="openOrder('${o.id}')" style="margin-bottom:8px"><div class="order-header"><span class="order-id">${o.id}</span><span class="order-status status-${o.estado}">${o.estado.replace(/_/g, ' ')}</span></div><div class="order-details">👤 ${o.cliente || o.whatsapp} • S/${o.total.toFixed(2)}</div></div>`).join('');
         }
         
+        // ========== CLIENTS ==========
         function renderClients(filtered = null) {
             const list = document.getElementById('clients-list');
             const data = filtered || clients;
-            if (data.length === 0) { list.innerHTML = '<div class="empty-state"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg><p>No hay clientes</p></div>'; return; }
+            if (data.length === 0) { list.innerHTML = '<div class="empty-state"><p>No hay clientes</p></div>'; return; }
             list.innerHTML = data.map(c => `<div class="client-item" onclick="openClient('${c.whatsapp}')"><div class="client-avatar">${(c.nombre || 'U')[0].toUpperCase()}</div><div class="client-info"><div class="client-name">${c.nombre || 'Sin nombre'}</div><div class="client-phone">📱 ${c.whatsapp}</div></div></div>`).join('');
         }
         
+        // ========== NAVIGATION ==========
         function setupNavigation() {
             document.querySelectorAll('.nav-item').forEach(item => {
                 item.addEventListener('click', () => {
@@ -332,6 +491,7 @@
                     document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
                     document.getElementById('tab-' + tab).classList.add('active');
                     document.getElementById('fab').style.display = tab === 'products' ? 'flex' : 'none';
+                    if (tab === 'live') refreshLiveStats();
                 });
             });
         }
@@ -346,6 +506,7 @@
             });
         }
         
+        // ========== MODALS ==========
         function openAddProduct() {
             document.getElementById('product-modal-title').textContent = 'Nuevo Producto';
             document.getElementById('product-form').reset();
