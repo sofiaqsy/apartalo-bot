@@ -2,7 +2,7 @@
  * APARTALO BOT
  * Bot multi-negocio para ventas por WhatsApp en lives
  * 
- * Version: 1.0.0
+ * Version: 1.1.0
  */
 
 const express = require('express');
@@ -14,11 +14,16 @@ const config = require('./config');
 const sheetsService = require('./sheets-service');
 const stateManager = require('./state-manager');
 const webhookRoute = require('./webhook');
+const adminRoutes = require('./admin-routes');
 
 const app = express();
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+
+// ========================================
+// RUTAS PRINCIPALES
+// ========================================
 
 app.get('/', (req, res) => {
     const stats = stateManager.getStats();
@@ -27,7 +32,7 @@ app.get('/', (req, res) => {
     res.json({
         status: 'active',
         service: 'ApartaLo Bot',
-        version: '1.0.0',
+        version: '1.1.0',
         platform: config.platform.name,
         stats: {
             activeSessions: stats.activeSessions,
@@ -42,7 +47,8 @@ app.get('/', (req, res) => {
         })),
         endpoints: {
             webhook: '/webhook',
-            health: '/health'
+            health: '/health',
+            api: '/api'
         }
     });
 });
@@ -56,7 +62,65 @@ app.get('/health', (req, res) => {
     });
 });
 
+// ========================================
+// RUTAS DE WEBHOOK (WhatsApp)
+// ========================================
 app.use('/webhook', webhookRoute);
+
+// ========================================
+// RUTAS DE ADMIN API
+// ========================================
+app.use('/api', adminRoutes);
+
+// ========================================
+// DOCUMENTACION DE API
+// ========================================
+app.get('/api', (req, res) => {
+    res.json({
+        name: 'ApartaLo Admin API',
+        version: '1.1.0',
+        endpoints: {
+            negocios: {
+                'GET /api/negocios': 'Listar todos los negocios',
+                'GET /api/negocios/:id': 'Obtener un negocio',
+                'POST /api/negocios/reload': 'Recargar negocios desde Sheets'
+            },
+            productos: {
+                'GET /api/:businessId/productos': 'Listar productos (query: estado, disponible)',
+                'GET /api/:businessId/productos/:codigo': 'Obtener un producto',
+                'POST /api/:businessId/productos': 'Crear producto',
+                'PUT /api/:businessId/productos/:codigo': 'Actualizar producto',
+                'PUT /api/:businessId/productos/:codigo/stock': 'Actualizar stock',
+                'DELETE /api/:businessId/productos/:codigo': 'Desactivar producto',
+                'POST /api/:businessId/productos/:codigo/liberar': 'Liberar stock reservado'
+            },
+            pedidos: {
+                'GET /api/:businessId/pedidos': 'Listar pedidos (query: estado, fecha, limit)',
+                'GET /api/:businessId/pedidos/stats': 'Estadísticas de pedidos',
+                'GET /api/:businessId/pedidos/:id': 'Obtener un pedido',
+                'PUT /api/:businessId/pedidos/:id/estado': 'Actualizar estado',
+                'POST /api/:businessId/pedidos/:id/cancelar': 'Cancelar pedido y liberar stock'
+            },
+            clientes: {
+                'GET /api/:businessId/clientes': 'Listar clientes',
+                'GET /api/:businessId/clientes/:whatsapp': 'Buscar cliente con historial'
+            }
+        },
+        estados_pedido: [
+            'PENDIENTE_PAGO',
+            'PENDIENTE_VALIDACION',
+            'CONFIRMADO',
+            'EN_PREPARACION',
+            'ENVIADO',
+            'ENTREGADO',
+            'CANCELADO'
+        ]
+    });
+});
+
+// ========================================
+// ERROR HANDLERS
+// ========================================
 
 app.use((error, req, res, next) => {
     console.error('❌ Error:', error);
@@ -73,9 +137,13 @@ app.use((req, res) => {
     });
 });
 
+// ========================================
+// INICIALIZACION
+// ========================================
+
 async function initializeApp() {
     try {
-        console.log('\n🚀 Iniciando ApartaLo Bot v1.0...\n');
+        console.log('\n🚀 Iniciando ApartaLo Bot v1.1...\n');
         
         const sheetsReady = await sheetsService.initialize();
         
@@ -84,12 +152,13 @@ async function initializeApp() {
         app.listen(PORT, () => {
             console.log(`
 ╔════════════════════════════════════════════════════╗
-║       🛍️  APARTALO BOT v1.0 INICIADO  🛍️          ║
+║       🛍️  APARTALO BOT v1.1 INICIADO  🛍️          ║
 ║          Bot Multi-Negocio para Lives              ║
 ╠════════════════════════════════════════════════════╣
 ║  📍 Puerto: ${PORT.toString().padEnd(39)}║
 ║  🌐 URL: http://localhost:${PORT.toString().padEnd(23)}║
 ║  📱 Webhook: /webhook                              ║
+║  🔧 Admin API: /api                                ║
 ║  💚 Health: /health                                ║
 ║  ⚙️  Modo: ${config.app.isDevelopment ? '🔧 DESARROLLO' : '✅ PRODUCCION'}                        ║
 ╠════════════════════════════════════════════════════╣
