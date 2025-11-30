@@ -2,10 +2,11 @@
  * APARTALO BOT
  * Bot multi-negocio para ventas por WhatsApp en lives
  * 
- * Version: 1.1.0
+ * Version: 1.2.0
  */
 
 const express = require('express');
+const path = require('path');
 const dotenv = require('dotenv');
 
 dotenv.config();
@@ -22,6 +23,11 @@ app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
 // ========================================
+// ARCHIVOS ESTATICOS (PWA)
+// ========================================
+app.use(express.static(path.join(__dirname, 'public')));
+
+// ========================================
 // RUTAS PRINCIPALES
 // ========================================
 
@@ -32,7 +38,7 @@ app.get('/', (req, res) => {
     res.json({
         status: 'active',
         service: 'ApartaLo Bot',
-        version: '1.1.0',
+        version: '1.2.0',
         platform: config.platform.name,
         stats: {
             activeSessions: stats.activeSessions,
@@ -48,7 +54,8 @@ app.get('/', (req, res) => {
         endpoints: {
             webhook: '/webhook',
             health: '/health',
-            api: '/api'
+            api: '/api',
+            admin: '/admin'
         }
     });
 });
@@ -60,6 +67,13 @@ app.get('/health', (req, res) => {
         uptime: process.uptime(),
         sheetsConnected: sheetsService.initialized
     });
+});
+
+// ========================================
+// PANEL DE ADMIN (PWA)
+// ========================================
+app.get('/admin', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'admin.html'));
 });
 
 // ========================================
@@ -78,7 +92,7 @@ app.use('/api', adminRoutes);
 app.get('/api', (req, res) => {
     res.json({
         name: 'ApartaLo Admin API',
-        version: '1.1.0',
+        version: '1.2.0',
         endpoints: {
             negocios: {
                 'GET /api/negocios': 'Listar todos los negocios',
@@ -143,7 +157,7 @@ app.use((req, res) => {
 
 async function initializeApp() {
     try {
-        console.log('\n🚀 Iniciando ApartaLo Bot v1.1...\n');
+        console.log('\n🚀 Iniciando ApartaLo Bot v1.2...\n');
         
         const sheetsReady = await sheetsService.initialize();
         
@@ -152,13 +166,14 @@ async function initializeApp() {
         app.listen(PORT, () => {
             console.log(`
 ╔════════════════════════════════════════════════════╗
-║       🛍️  APARTALO BOT v1.1 INICIADO  🛍️          ║
+║       🛍️  APARTALO BOT v1.2 INICIADO  🛍️          ║
 ║          Bot Multi-Negocio para Lives              ║
 ╠════════════════════════════════════════════════════╣
 ║  📍 Puerto: ${PORT.toString().padEnd(39)}║
 ║  🌐 URL: http://localhost:${PORT.toString().padEnd(23)}║
 ║  📱 Webhook: /webhook                              ║
 ║  🔧 Admin API: /api                                ║
+║  📊 Admin Panel: /admin                            ║
 ║  💚 Health: /health                                ║
 ║  ⚙️  Modo: ${config.app.isDevelopment ? '🔧 DESARROLLO' : '✅ PRODUCCION'}                        ║
 ╠════════════════════════════════════════════════════╣
