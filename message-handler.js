@@ -973,11 +973,37 @@ class MessageHandler {
             );
         }
         
+        // Descargar imagen de WhatsApp
+        await whatsappService.sendMessage(from, '⏳ Procesando tu comprobante...');
+        
+        const downloadResult = await whatsappService.downloadMedia(mediaUrl);
+        
+        if (!downloadResult.success) {
+            return await whatsappService.sendMessage(from,
+                '❌ Error al descargar la imagen. Por favor, intenta nuevamente.'
+            );
+        }
+        
+        // Subir a Google Drive
+        const filename = `voucher_${pedidoId}_${Date.now()}.jpg`;
+        const uploadResult = await sheetsService.uploadImageToDrive(
+            downloadResult.buffer,
+            filename,
+            downloadResult.mimeType
+        );
+        
+        if (!uploadResult.success) {
+            return await whatsappService.sendMessage(from,
+                '❌ Error al guardar el comprobante. Por favor, intenta nuevamente.'
+            );
+        }
+        
+        // Actualizar pedido con el link de Drive
         await sheetsService.updateOrderStatus(
             session.businessId, 
             pedidoId, 
             'PENDIENTE_VALIDACION',
-            mediaUrl
+            uploadResult.directLink
         );
         
         // Limpiar el pedido activo ya que se envió el voucher
@@ -986,7 +1012,7 @@ class MessageHandler {
         stateManager.setStep(from, 'esperando_codigo');
         
         return await whatsappService.sendMessage(from,
-            'Voucher recibido!\n\n' +
+            '✅ Voucher recibido!\n\n' +
             'Tu pedido ' + pedidoId + ' esta siendo verificado.\n\n' +
             'Te notificaremos cuando sea confirmado.\n\n' +
             'Gracias por tu compra!'

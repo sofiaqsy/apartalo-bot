@@ -238,6 +238,41 @@ class WhatsAppService {
             // Silenciar error de marcar como leido
         }
     }
+    
+    async downloadMedia(mediaId) {
+        try {
+            // Paso 1: Obtener URL del media
+            const mediaUrl = `${this.apiUrl}/${this.apiVersion}/${mediaId}`;
+            const mediaResponse = await axios.get(mediaUrl, {
+                headers: {
+                    'Authorization': `Bearer ${this.token}`
+                }
+            });
+            
+            const fileUrl = mediaResponse.data.url;
+            const mimeType = mediaResponse.data.mime_type;
+            
+            // Paso 2: Descargar el archivo
+            const fileResponse = await axios.get(fileUrl, {
+                headers: {
+                    'Authorization': `Bearer ${this.token}`
+                },
+                responseType: 'arraybuffer'
+            });
+            
+            console.log(`✅ Media descargado: ${mediaId}`);
+            
+            return {
+                success: true,
+                buffer: fileResponse.data,
+                mimeType: mimeType
+            };
+            
+        } catch (error) {
+            console.error('❌ Error descargando media:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
 }
 
 module.exports = new WhatsAppService();

@@ -35,10 +35,14 @@ class SheetsService {
             
             this.auth = new google.auth.GoogleAuth({
                 credentials: credentials,
-                scopes: ['https://www.googleapis.com/auth/spreadsheets']
+                scopes: [
+                    'https://www.googleapis.com/auth/spreadsheets',
+                    'https://www.googleapis.com/auth/drive.file'
+                ]
             });
             
             this.sheets = google.sheets({ version: 'v4', auth: this.auth });
+            this.drive = google.drive({ version: 'v3', auth: this.auth });
             this.masterSpreadsheetId = masterSpreadsheetId;
             
             await this.loadBusinesses();
@@ -618,6 +622,52 @@ class SheetsService {
             
         } catch (error) {
             console.error('❌ Error agregando producto al pedido:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+    
+    // ========================================
+    // GOOGLE DRIVE - SUBIR IMÁGENES
+    // ========================================
+    
+    async uploadImageToDrive(imageBuffer, filename, mimeType) {
+        try {
+            const fileMetadata = {
+                name: filename,
+                parents: [config.sheets.driveFolderId || 'root']
+            };
+            
+            const media = {
+                mimeType: mimeType,
+                body: require('stream').Readable.from(imageBuffer)
+            };
+            
+            const file = await this.drive.files.create({
+                resource: fileMetadata,
+                media: media,
+                fields: 'id, webViewLink, webContentLink'
+            });
+            
+            // Hacer el archivo público para que se pueda ver
+            await this.drive.permissions.create({
+                fileId: file.data.id,
+                requestBody: {
+                    role: 'reader',
+                    type: 'anyone'
+                }
+            });
+            
+            console.log(`✅ Imagen subida a Drive: ${file.data.id}`);
+            
+            return {
+                success: true,
+                fileId: file.data.id,
+                webViewLink: file.data.webViewLink,
+                directLink: `https://drive.google.com/uc?export=view&id=${file.data.id}`
+            };
+            
+        } catch (error) {
+            console.error('❌ Error subiendo imagen a Drive:', error.message);
             return { success: false, error: error.message };
         }
     }

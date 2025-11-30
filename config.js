@@ -20,7 +20,10 @@ module.exports = {
         credentials: process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
         
         // Spreadsheet MAESTRO con lista de negocios
-        masterSpreadsheetId: process.env.MASTER_SPREADSHEET_ID
+        masterSpreadsheetId: process.env.MASTER_SPREADSHEET_ID,
+        
+        // ID de carpeta en Google Drive para guardar vouchers (opcional)
+        driveFolderId: process.env.GOOGLE_DRIVE_FOLDER_ID || null
     },
     
     platform: {
