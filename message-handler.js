@@ -548,7 +548,25 @@ class MessageHandler {
             
             mensaje += 'Escribe el codigo del pedido para ver detalles.';
             
-            await whatsappService.sendMessage(from, mensaje);
+            // Si hay pedidos pendientes de pago, agregar botón
+            const pedidosPendientesPago = pedidosActivos.filter(p => p.estado === 'PENDIENTE_PAGO');
+            
+            if (pedidosPendientesPago.length > 0) {
+                // Si hay solo un pedido pendiente, botón directo
+                if (pedidosPendientesPago.length === 1) {
+                    const pedido = pedidosPendientesPago[0];
+                    stateManager.setStep(from, 'esperando_voucher', { pedidoId: pedido.id });
+                    
+                    return await whatsappService.sendButtonMessage(from, mensaje, [
+                        { title: 'Enviar comprobante', id: 'enviar_voucher' }
+                    ]);
+                } else {
+                    // Si hay múltiples, pedir que escriba el código
+                    return await whatsappService.sendMessage(from, mensaje);
+                }
+            } else {
+                await whatsappService.sendMessage(from, mensaje);
+            }
         } catch (error) {
             console.error('Error mostrando pedidos:', error);
         }
