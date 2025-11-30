@@ -115,7 +115,7 @@ class SheetsService {
     // INVENTARIO POR NEGOCIO
     // ========================================
     
-    async getInventory(businessId) {
+    async getInventory(businessId, includeAll = false) {
         const business = this.getBusiness(businessId);
         if (!business || !business.spreadsheetId) {
             return [];
@@ -132,12 +132,16 @@ class SheetsService {
             
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
+                if (!row[0]) continue; // Skip empty rows
+                
                 const estado = (row[7] || 'ACTIVO').toUpperCase();
                 const stock = parseInt(row[4]) || 0;
                 const stockReservado = parseInt(row[5]) || 0;
                 const disponible = stock - stockReservado;
                 
-                if (estado === 'ACTIVO' && disponible > 0) {
+                // Para el bot, solo productos activos con stock
+                // Para admin (includeAll), todos los productos
+                if (includeAll || (estado === 'ACTIVO' && disponible > 0)) {
                     productos.push({
                         codigo: row[0] || '',
                         nombre: row[1] || '',
@@ -162,8 +166,107 @@ class SheetsService {
     }
     
     async getProductByCode(businessId, codigo) {
-        const inventory = await this.getInventory(businessId);
+        const inventory = await this.getInventory(businessId, true);
         return inventory.find(p => p.codigo.toUpperCase() === codigo.toUpperCase());
+    }
+    
+    async createProduct(businessId, productData) {
+        const business = this.getBusiness(businessId);
+        if (!business) return { success: false, error: 'Negocio no encontrado' };
+        
+        try {
+            // Verificar si ya existe
+            const existing = await this.getProductByCode(businessId, productData.codigo);
+            if (existing) {
+                return { success: false, error: 'Ya existe un producto con ese código' };
+            }
+            
+            const valores = [[
+                productData.codigo,
+                productData.nombre,
+                productData.descripcion || '',
+                productData.precio,
+                productData.stock,
+                0, // StockReservado inicial
+                productData.imagenUrl || '',
+                productData.estado || 'ACTIVO'
+            ]];
+            
+            await this.sheets.spreadsheets.values.append({
+                spreadsheetId: business.spreadsheetId,
+                range: 'Inventario!A:H',
+                valueInputOption: 'USER_ENTERED',
+                resource: { values: valores }
+            });
+            
+            console.log(`✅ Producto creado: ${productData.codigo}`);
+            return { success: true, codigo: productData.codigo };
+            
+        } catch (error) {
+            console.error('❌ Error creando producto:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+    
+    async updateProduct(businessId, codigo, updates) {
+        const business = this.getBusiness(businessId);
+        if (!business) return { success: false, error: 'Negocio no encontrado' };
+        
+        try {
+            const producto = await this.getProductByCode(businessId, codigo);
+            if (!producto) {
+                return { success: false, error: 'Producto no encontrado' };
+            }
+            
+            const batchUpdates = [];
+            const rowIndex = producto.rowIndex;
+            
+            if (updates.nombre !== undefined) {
+                batchUpdates.push({ range: `Inventario!B${rowIndex}`, values: [[updates.nombre]] });
+            }
+            if (updates.descripcion !== undefined) {
+                batchUpdates.push({ range: `Inventario!C${rowIndex}`, values: [[updates.descripcion]] });
+            }
+            if (updates.precio !== undefined) {
+                batchUpdates.push({ range: `Inventario!D${rowIndex}`, values: [[updates.precio]] });
+            }
+            if (updates.stock !== undefined) {
+                batchUpdates.push({ range: `Inventario!E${rowIndex}`, values: [[updates.stock]] });
+            }
+            if (updates.stockReservado !== undefined) {
+                batchUpdates.push({ range: `Inventario!F${rowIndex}`, values: [[updates.stockReservado]] });
+            }
+            if (updates.imagenUrl !== undefined) {
+                batchUpdates.push({ range: `Inventario!G${rowIndex}`, values: [[updates.imagenUrl]] });
+            }
+            if (updates.estado !== undefined) {
+                batchUpdates.push({ range: `Inventario!H${rowIndex}`, values: [[updates.estado]] });
+            }
+            
+            if (batchUpdates.length > 0) {
+                await this.sheets.spreadsheets.values.batchUpdate({
+                    spreadsheetId: business.spreadsheetId,
+                    resource: {
+                        data: batchUpdates,
+                        valueInputOption: 'USER_ENTERED'
+                    }
+                });
+            }
+            
+            console.log(`✅ Producto actualizado: ${codigo}`);
+            return { success: true, codigo };
+            
+        } catch (error) {
+            console.error('❌ Error actualizando producto:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+    
+    async updateProductStock(businessId, codigo, stockData) {
+        const updates = {};
+        if (stockData.stock !== undefined) updates.stock = stockData.stock;
+        if (stockData.stockReservado !== undefined) updates.stockReservado = stockData.stockReservado;
+        return await this.updateProduct(businessId, codigo, updates);
     }
     
     async reserveStock(businessId, codigo, cantidad) {
@@ -207,7 +310,7 @@ class SheetsService {
         
         try {
             const producto = await this.getProductByCode(businessId, codigo);
-            if (!producto) return { success: false };
+            if (!producto) return { success: false, error: 'Producto no encontrado' };
             
             const nuevoReservado = Math.max(0, producto.stockReservado - cantidad);
             
@@ -219,11 +322,11 @@ class SheetsService {
             });
             
             console.log(`🔓 Liberado: ${cantidad} x ${producto.nombre}`);
-            return { success: true };
+            return { success: true, liberado: cantidad, nuevoReservado };
             
         } catch (error) {
             console.error('❌ Error liberando stock:', error.message);
-            return { success: false };
+            return { success: false, error: error.message };
         }
     }
     
@@ -274,7 +377,7 @@ class SheetsService {
         }
     }
     
-    async getOrdersByClient(businessId, whatsapp) {
+    async getAllOrders(businessId) {
         const business = this.getBusiness(businessId);
         if (!business) return [];
         
@@ -286,32 +389,54 @@ class SheetsService {
             
             const rows = response.data.values || [];
             const pedidos = [];
-            const whatsappLimpio = whatsapp.replace(/[^0-9]/g, '');
             
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
-                const whatsappPedido = (row[3] || '').replace(/[^0-9]/g, '');
+                if (!row[0]) continue;
                 
-                if (whatsappPedido.includes(whatsappLimpio) || whatsappLimpio.includes(whatsappPedido)) {
-                    pedidos.push({
-                        id: row[0],
-                        fecha: row[1],
-                        hora: row[2],
-                        whatsapp: row[3],
-                        cliente: row[4],
-                        telefono: row[5],
-                        direccion: row[6],
-                        productos: row[7],
-                        total: parseFloat(row[8]) || 0,
-                        estado: row[9],
-                        voucherUrl: row[10],
-                        observaciones: row[11],
-                        rowIndex: i + 1
-                    });
-                }
+                pedidos.push({
+                    id: row[0],
+                    fecha: row[1],
+                    hora: row[2],
+                    whatsapp: row[3],
+                    cliente: row[4],
+                    telefono: row[5],
+                    direccion: row[6],
+                    productos: row[7],
+                    total: parseFloat(row[8]) || 0,
+                    estado: row[9] || 'PENDIENTE_PAGO',
+                    voucherUrl: row[10],
+                    observaciones: row[11],
+                    rowIndex: i + 1
+                });
             }
             
-            return pedidos;
+            // Ordenar por fecha descendente (más recientes primero)
+            return pedidos.reverse();
+            
+        } catch (error) {
+            console.error('❌ Error obteniendo pedidos:', error.message);
+            return [];
+        }
+    }
+    
+    async getOrderById(businessId, pedidoId) {
+        const pedidos = await this.getAllOrders(businessId);
+        return pedidos.find(p => p.id === pedidoId);
+    }
+    
+    async getOrdersByClient(businessId, whatsapp) {
+        const business = this.getBusiness(businessId);
+        if (!business) return [];
+        
+        try {
+            const pedidos = await this.getAllOrders(businessId);
+            const whatsappLimpio = whatsapp.replace(/[^0-9]/g, '');
+            
+            return pedidos.filter(p => {
+                const whatsappPedido = (p.whatsapp || '').replace(/[^0-9]/g, '');
+                return whatsappPedido.includes(whatsappLimpio) || whatsappLimpio.includes(whatsappPedido);
+            });
             
         } catch (error) {
             console.error('❌ Error obteniendo pedidos:', error.message);
@@ -324,46 +449,57 @@ class SheetsService {
         if (!business) return { success: false };
         
         try {
-            const response = await this.sheets.spreadsheets.values.get({
-                spreadsheetId: business.spreadsheetId,
-                range: 'Pedidos!A:L'
-            });
-            
-            const rows = response.data.values || [];
-            
-            for (let i = 1; i < rows.length; i++) {
-                if (rows[i][0] === pedidoId) {
-                    const updates = [
-                        {
-                            range: `Pedidos!J${i + 1}`,
-                            values: [[nuevoEstado]]
-                        }
-                    ];
-                    
-                    if (voucherUrl) {
-                        updates.push({
-                            range: `Pedidos!K${i + 1}`,
-                            values: [[voucherUrl]]
-                        });
-                    }
-                    
-                    await this.sheets.spreadsheets.values.batchUpdate({
-                        spreadsheetId: business.spreadsheetId,
-                        resource: {
-                            data: updates,
-                            valueInputOption: 'USER_ENTERED'
-                        }
-                    });
-                    
-                    console.log(`✅ Pedido ${pedidoId} actualizado: ${nuevoEstado}`);
-                    return { success: true };
-                }
+            const pedido = await this.getOrderById(businessId, pedidoId);
+            if (!pedido) {
+                return { success: false, error: 'Pedido no encontrado' };
             }
             
-            return { success: false, error: 'Pedido no encontrado' };
+            const updates = [
+                { range: `Pedidos!J${pedido.rowIndex}`, values: [[nuevoEstado]] }
+            ];
+            
+            if (voucherUrl) {
+                updates.push({ range: `Pedidos!K${pedido.rowIndex}`, values: [[voucherUrl]] });
+            }
+            
+            await this.sheets.spreadsheets.values.batchUpdate({
+                spreadsheetId: business.spreadsheetId,
+                resource: {
+                    data: updates,
+                    valueInputOption: 'USER_ENTERED'
+                }
+            });
+            
+            console.log(`✅ Pedido ${pedidoId} actualizado: ${nuevoEstado}`);
+            return { success: true, pedidoId, estado: nuevoEstado };
             
         } catch (error) {
             console.error('❌ Error actualizando pedido:', error.message);
+            return { success: false, error: error.message };
+        }
+    }
+    
+    async updateOrderObservations(businessId, pedidoId, observaciones) {
+        const business = this.getBusiness(businessId);
+        if (!business) return { success: false };
+        
+        try {
+            const pedido = await this.getOrderById(businessId, pedidoId);
+            if (!pedido) {
+                return { success: false, error: 'Pedido no encontrado' };
+            }
+            
+            await this.sheets.spreadsheets.values.update({
+                spreadsheetId: business.spreadsheetId,
+                range: `Pedidos!L${pedido.rowIndex}`,
+                valueInputOption: 'USER_ENTERED',
+                resource: { values: [[observaciones]] }
+            });
+            
+            return { success: true };
+            
+        } catch (error) {
+            console.error('❌ Error actualizando observaciones:', error.message);
             return { success: false, error: error.message };
         }
     }
@@ -372,9 +508,9 @@ class SheetsService {
     // CLIENTES POR NEGOCIO
     // ========================================
     
-    async findClient(businessId, whatsapp) {
+    async getAllClients(businessId) {
         const business = this.getBusiness(businessId);
-        if (!business) return null;
+        if (!business) return [];
         
         try {
             const response = await this.sheets.spreadsheets.values.get({
@@ -383,27 +519,44 @@ class SheetsService {
             });
             
             const rows = response.data.values || [];
-            const whatsappLimpio = whatsapp.replace(/[^0-9]/g, '');
+            const clientes = [];
             
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
-                const whatsappCliente = (row[1] || '').replace(/[^0-9]/g, '');
+                if (!row[0]) continue;
                 
-                if (whatsappCliente.includes(whatsappLimpio) || whatsappLimpio.includes(whatsappCliente)) {
-                    return {
-                        id: row[0],
-                        whatsapp: row[1],
-                        nombre: row[2],
-                        telefono: row[3],
-                        direccion: row[4],
-                        fechaRegistro: row[5],
-                        ultimaCompra: row[6],
-                        rowIndex: i + 1
-                    };
-                }
+                clientes.push({
+                    id: row[0],
+                    whatsapp: row[1],
+                    nombre: row[2],
+                    telefono: row[3],
+                    direccion: row[4],
+                    fechaRegistro: row[5],
+                    ultimaCompra: row[6],
+                    rowIndex: i + 1
+                });
             }
             
-            return null;
+            return clientes;
+            
+        } catch (error) {
+            console.error('❌ Error obteniendo clientes:', error.message);
+            return [];
+        }
+    }
+    
+    async findClient(businessId, whatsapp) {
+        const business = this.getBusiness(businessId);
+        if (!business) return null;
+        
+        try {
+            const clientes = await this.getAllClients(businessId);
+            const whatsappLimpio = whatsapp.replace(/[^0-9]/g, '');
+            
+            return clientes.find(c => {
+                const whatsappCliente = (c.whatsapp || '').replace(/[^0-9]/g, '');
+                return whatsappCliente.includes(whatsappLimpio) || whatsappLimpio.includes(whatsappCliente);
+            });
             
         } catch (error) {
             console.error('❌ Error buscando cliente:', error.message);
