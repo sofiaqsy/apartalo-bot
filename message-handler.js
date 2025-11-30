@@ -11,7 +11,7 @@ const config = require('./config');
 
 class MessageHandler {
     constructor() {
-        console.log('📱 MessageHandler inicializado con Live Commerce');
+        console.log('MessageHandler inicializado con Live Commerce');
     }
     
     async handleMessage(from, body, mediaUrl = null, interactiveData = null) {
@@ -19,17 +19,27 @@ class MessageHandler {
         const mensajeLower = mensaje.toLowerCase();
         const session = stateManager.getSession(from);
         
-        console.log(`\n📨 Mensaje de ${from}`);
-        console.log(`   Texto: ${mensaje}`);
-        console.log(`   Step: ${session.step}`);
-        console.log(`   Business: ${session.businessId || 'ninguno'}`);
+        console.log('Mensaje de ' + from);
+        console.log('Texto: ' + mensaje);
+        console.log('Step: ' + session.step);
+        console.log('Business: ' + (session.businessId || 'ninguno'));
         if (interactiveData) {
-            console.log(`   Interactive: ${JSON.stringify(interactiveData)}`);
+            console.log('Interactive: ' + JSON.stringify(interactiveData));
         }
         
-        // MANEJAR BOTONES INTERACTIVOS (reserva rápida del LIVE)
-        if (interactiveData) {
+        // MANEJAR BOTONES INTERACTIVOS (reserva rapida del LIVE)
+        if (interactiveData && interactiveData.type === 'button_reply') {
             return await this.handleInteractive(from, interactiveData, session);
+        }
+        
+        // Detectar si el mensaje es un ID de boton (empieza con RESERVAR_)
+        if (mensaje.startsWith('RESERVAR_')) {
+            const parts = mensaje.split('_');
+            if (parts.length >= 3) {
+                const businessId = parts[1];
+                const productCode = parts[2];
+                return await this.procesarReservaRapida(from, businessId, productCode);
+            }
         }
         
         // COMANDOS GLOBALES
@@ -66,11 +76,11 @@ class MessageHandler {
         }
         
         // COMANDOS DE LIVE
-        if (mensajeLower === 'live 5' || mensajeLower === 'live5' || mensajeLower === '🔴 live 5 min') {
+        if (mensajeLower === 'live 5' || mensajeLower === 'live5' || mensajeLower === 'live 5 min') {
             return await this.suscribirAlLive(from, 5);
         }
         
-        if (mensajeLower === 'live 10' || mensajeLower === 'live10' || mensajeLower === '🔴 live 10 min') {
+        if (mensajeLower === 'live 10' || mensajeLower === 'live10' || mensajeLower === 'live 10 min') {
             return await this.suscribirAlLive(from, 10);
         }
         
@@ -131,7 +141,7 @@ class MessageHandler {
                 stateManager.setActiveBusiness(from, businessId);
             } else {
                 return await whatsappService.sendMessage(from,
-                    `❌ No hay negocios disponibles en este momento.`
+                    'No hay negocios disponibles en este momento.'
                 );
             }
         }
@@ -144,14 +154,14 @@ class MessageHandler {
         
         const subscriberCount = liveManager.getSubscriberCount(businessId);
         
-        let mensaje = `🔴 *¡ESTAS EN EL LIVE!*\n\n`;
-        mensaje += `📺 ${negocio.nombre}\n`;
-        mensaje += `⏱️ Duracion: ${minutos} minutos\n`;
-        mensaje += `👥 Conectados: ${subscriberCount} personas\n\n`;
-        mensaje += `Recibiras los productos en tiempo real.\n`;
-        mensaje += `Cuando veas algo que te gusta, toca *"🛒 ¡LO QUIERO!"* para apartarlo.\n\n`;
-        mensaje += `⚡ *¡El primero en tocar se lo lleva!*\n\n`;
-        mensaje += `_Escribe "salir" para desconectarte_`;
+        let mensaje = 'ESTAS EN EL LIVE\n\n';
+        mensaje += negocio.nombre + '\n';
+        mensaje += 'Duracion: ' + minutos + ' minutos\n';
+        mensaje += 'Conectados: ' + subscriberCount + ' personas\n\n';
+        mensaje += 'Recibiras los productos en tiempo real.\n';
+        mensaje += 'Cuando veas algo que te gusta, toca el boton para apartarlo.\n\n';
+        mensaje += 'El primero en tocar se lo lleva\n\n';
+        mensaje += 'Escribe "salir" para desconectarte';
         
         stateManager.setStep(from, 'en_live');
         
@@ -169,9 +179,9 @@ class MessageHandler {
         stateManager.setStep(from, 'esperando_codigo');
         
         return await whatsappService.sendMessage(from,
-            `⚪ Saliste del LIVE.\n\n` +
-            `Puedes seguir comprando escribiendo codigos de productos, ` +
-            `o escribir *"live 5"* o *"live 10"* para volver a conectarte.`
+            'Saliste del LIVE.\n\n' +
+            'Puedes seguir comprando escribiendo codigos de productos, ' +
+            'o escribir "live 5" o "live 10" para volver a conectarte.'
         );
     }
     
@@ -180,32 +190,34 @@ class MessageHandler {
     // ========================================
     
     async handleInteractive(from, interactiveData, session) {
-        const buttonId = interactiveData.button_reply?.id || '';
-        const buttonTitle = interactiveData.button_reply?.title || '';
+        // El ID viene directamente en interactiveData.id
+        const buttonId = interactiveData.id || '';
+        const buttonTitle = interactiveData.title || '';
         
-        console.log(`🔘 Boton presionado: ${buttonId} - ${buttonTitle}`);
+        console.log('Boton presionado ID: ' + buttonId + ' Title: ' + buttonTitle);
         
-        // Reserva rápida desde el LIVE: RESERVAR_BUSINESSID_CODIGO
+        // Reserva rapida desde el LIVE: RESERVAR_BUSINESSID_CODIGO
         if (buttonId.startsWith('RESERVAR_')) {
             const parts = buttonId.split('_');
-            const businessId = parts[1];
-            const productCode = parts[2];
-            
-            return await this.procesarReservaRapida(from, businessId, productCode);
+            if (parts.length >= 3) {
+                const businessId = parts[1];
+                const productCode = parts[2];
+                return await this.procesarReservaRapida(from, businessId, productCode);
+            }
         }
         
-        // Botones del menú normal
+        // Botones del menu normal (usar titulo)
         const titleLower = buttonTitle.toLowerCase();
         
-        if (titleLower === 'ver carrito') {
+        if (titleLower === 'ver carrito' || titleLower === 'carrito') {
             return await this.mostrarCarrito(from, session.businessId);
         }
         
-        if (titleLower === 'pagar') {
+        if (titleLower === 'pagar' || titleLower === 'pagar ahora') {
             return await this.iniciarPago(from, session.businessId);
         }
         
-        if (titleLower === 'seguir comprando') {
+        if (titleLower === 'seguir comprando' || titleLower === 'seguir en el live') {
             return await this.mostrarMenuNegocio(from, session.businessId);
         }
         
@@ -217,11 +229,11 @@ class MessageHandler {
         if (titleLower === 'vaciar carrito') {
             stateManager.clearCart(from, session.businessId);
             return await whatsappService.sendMessage(from,
-                `🗑️ Carrito vaciado.\n\nEscribe un codigo de producto para comenzar.`
+                'Carrito vaciado.\n\nEscribe un codigo de producto para comenzar.'
             );
         }
         
-        if (titleLower === 'si, confirmar') {
+        if (titleLower === 'si, confirmar' || titleLower === 'confirmar') {
             const cliente = session.data?.cliente;
             if (cliente) {
                 return await this.crearPedido(from, session.businessId, cliente);
@@ -231,7 +243,7 @@ class MessageHandler {
         if (titleLower === 'editar datos') {
             stateManager.setStep(from, 'datos_nombre');
             return await whatsappService.sendMessage(from,
-                `📝 Vamos a actualizar tus datos.\n\n¿Cual es tu *nombre completo*?`
+                'Vamos a actualizar tus datos.\n\nCual es tu nombre completo?'
             );
         }
         
@@ -243,7 +255,7 @@ class MessageHandler {
             return await this.suscribirAlLive(from, 10);
         }
         
-        // Selección de negocio por nombre
+        // Seleccion de negocio por nombre
         const negocios = sheetsService.getBusinesses();
         const negocioMatch = negocios.find(n => 
             n.nombre.toLowerCase() === titleLower
@@ -254,7 +266,7 @@ class MessageHandler {
         }
         
         return await whatsappService.sendMessage(from, 
-            `No entendi esa opcion. Escribe *"inicio"* para ver el menu.`
+            'No entendi esa opcion. Escribe "inicio" para ver el menu.'
         );
     }
     
@@ -268,20 +280,20 @@ class MessageHandler {
         if (!resultado.success) {
             // Ya fue reservado por otro usuario
             return await whatsappService.sendMessage(from,
-                `${resultado.message}\n\n` +
-                `Sigue atento al LIVE, vienen mas productos! 👀`
+                resultado.message + '\n\n' +
+                'Sigue atento al LIVE, vienen mas productos!'
             );
         }
         
-        // ¡RESERVADO! Ahora reservar el stock real
+        // RESERVADO! Ahora reservar el stock real
         const stockResult = await sheetsService.reserveStock(businessId, productCode, 1);
         
         if (!stockResult.success) {
             // Error de stock, liberar la reserva del live
             liveManager.clearLiveProduct(businessId, productCode);
             return await whatsappService.sendMessage(from,
-                `❌ El producto ya no tiene stock disponible.\n\n` +
-                `Sigue atento al LIVE! 👀`
+                'El producto ya no tiene stock disponible.\n\n' +
+                'Sigue atento al LIVE!'
             );
         }
         
@@ -297,16 +309,16 @@ class MessageHandler {
         const cart = stateManager.getCart(from, businessId);
         const cartTotal = stateManager.getCartTotal(from, businessId);
         
-        let mensaje = `🎉 *¡LO APARTASTE!*\n\n`;
-        mensaje += `✅ ${resultado.producto.nombre}\n`;
-        mensaje += `💰 S/${resultado.producto.precio.toFixed(2)}\n\n`;
-        mensaje += `🛒 Tu carrito: ${cart.length} producto(s)\n`;
-        mensaje += `💵 Total: S/${cartTotal.toFixed(2)}\n\n`;
-        mensaje += `Sigue en el LIVE o escribe *"pagar"* cuando termines.`;
+        let mensaje = 'LO APARTASTE!\n\n';
+        mensaje += resultado.producto.nombre + '\n';
+        mensaje += 'S/' + resultado.producto.precio.toFixed(2) + '\n\n';
+        mensaje += 'Tu carrito: ' + cart.length + ' producto(s)\n';
+        mensaje += 'Total: S/' + cartTotal.toFixed(2) + '\n\n';
+        mensaje += 'Sigue en el LIVE o escribe "pagar" cuando termines.';
         
         return await whatsappService.sendButtonMessage(from, mensaje, [
-            { title: 'Pagar ahora' },
-            { title: 'Seguir en el LIVE' }
+            { title: 'Pagar ahora', id: 'pagar' },
+            { title: 'Seguir en LIVE', id: 'seguir' }
         ]);
     }
     
@@ -317,9 +329,9 @@ class MessageHandler {
         
         if (negocios.length === 0) {
             return await whatsappService.sendMessage(from,
-                `Hola! Bienvenido a *${config.platform.name}*\n\n` +
-                `En este momento no hay negocios disponibles.\n` +
-                `Por favor, intenta mas tarde.`
+                'Hola! Bienvenido a ' + config.platform.name + '\n\n' +
+                'En este momento no hay negocios disponibles.\n' +
+                'Por favor, intenta mas tarde.'
             );
         }
         
@@ -337,20 +349,23 @@ class MessageHandler {
     async mostrarListaNegocios(from) {
         const negocios = sheetsService.getBusinesses();
         
-        let mensaje = `🛍️ *${config.platform.name}*\n\n`;
-        mensaje += `Con que negocio quieres comprar hoy?\n\n`;
+        let mensaje = config.platform.name + '\n\n';
+        mensaje += 'Con que negocio quieres comprar hoy?\n\n';
         
         negocios.forEach((neg, idx) => {
-            mensaje += `*${idx + 1}.* ${neg.nombre}\n`;
+            mensaje += (idx + 1) + '. ' + neg.nombre + '\n';
             if (neg.descripcion) {
-                mensaje += `   _${neg.descripcion}_\n`;
+                mensaje += '   ' + neg.descripcion + '\n';
             }
         });
         
-        mensaje += `\n📝 Escribe el numero del negocio`;
+        mensaje += '\nEscribe el numero del negocio';
         
         if (negocios.length <= 3) {
-            const botones = negocios.map(neg => ({ title: neg.nombre.substring(0, 20) }));
+            const botones = negocios.map(neg => ({ 
+                title: neg.nombre.substring(0, 20),
+                id: 'negocio_' + neg.id
+            }));
             return await whatsappService.sendButtonMessage(from, mensaje, botones);
         }
         
@@ -374,8 +389,8 @@ class MessageHandler {
         
         if (!negocioSeleccionado) {
             return await whatsappService.sendMessage(from,
-                `No encontre ese negocio.\n\n` +
-                `Escribe el numero del negocio o su nombre.`
+                'No encontre ese negocio.\n\n' +
+                'Escribe el numero del negocio o su nombre.'
             );
         }
         
@@ -398,31 +413,31 @@ class MessageHandler {
         const isSubscribed = liveManager.isSubscribed(businessId, from);
         const subscriberCount = liveManager.getSubscriberCount(businessId);
         
-        let mensaje = `🏪 *${negocio.nombre}*\n\n`;
+        let mensaje = negocio.nombre + '\n\n';
         
         if (isSubscribed) {
-            mensaje += `🔴 *Estas conectado al LIVE*\n`;
-            mensaje += `👥 ${subscriberCount} personas conectadas\n\n`;
+            mensaje += 'Estas conectado al LIVE\n';
+            mensaje += subscriberCount + ' personas conectadas\n\n';
         }
         
         if (cart.length > 0) {
-            mensaje += `🛒 Tienes *${cart.length} producto(s)* en tu carrito\n`;
-            mensaje += `💰 Total: *S/${cartTotal.toFixed(2)}*\n\n`;
+            mensaje += 'Tienes ' + cart.length + ' producto(s) en tu carrito\n';
+            mensaje += 'Total: S/' + cartTotal.toFixed(2) + '\n\n';
         }
         
-        mensaje += `📺 *¿Hay un LIVE activo?*\n`;
-        mensaje += `Suscribete para recibir productos en tiempo real!\n\n`;
-        mensaje += `⏱️ Elige cuanto tiempo quieres estar conectado:`;
+        mensaje += 'Hay un LIVE activo?\n';
+        mensaje += 'Suscribete para recibir productos en tiempo real!\n\n';
+        mensaje += 'Elige cuanto tiempo quieres estar conectado:';
         
         stateManager.setStep(from, 'menu_negocio');
         
         const botones = [
-            { title: '🔴 LIVE 5 min' },
-            { title: '🔴 LIVE 10 min' }
+            { title: 'LIVE 5 min', id: 'live5' },
+            { title: 'LIVE 10 min', id: 'live10' }
         ];
         
         if (cart.length > 0) {
-            botones.push({ title: 'Ver carrito' });
+            botones.push({ title: 'Ver carrito', id: 'carrito' });
         }
         
         return await whatsappService.sendButtonMessage(from, mensaje, botones);
@@ -467,16 +482,16 @@ class MessageHandler {
         
         if (!producto) {
             return await whatsappService.sendMessage(from,
-                `❌ Codigo *${codigo}* no encontrado.\n\n` +
-                `Verifica el codigo del producto del live y escribelo nuevamente.`
+                'Codigo ' + codigo + ' no encontrado.\n\n' +
+                'Verifica el codigo del producto del live y escribelo nuevamente.'
             );
         }
         
-        let mensaje_producto = `✅ *${producto.nombre}*\n\n`;
-        mensaje_producto += `📝 ${producto.descripcion || 'Sin descripcion'}\n`;
-        mensaje_producto += `💰 Precio: *S/${producto.precio.toFixed(2)}*\n`;
-        mensaje_producto += `📦 Disponible: ${producto.disponible} unidades\n\n`;
-        mensaje_producto += `Cuantas unidades quieres reservar?`;
+        let mensaje_producto = producto.nombre + '\n\n';
+        mensaje_producto += (producto.descripcion || 'Sin descripcion') + '\n';
+        mensaje_producto += 'Precio: S/' + producto.precio.toFixed(2) + '\n';
+        mensaje_producto += 'Disponible: ' + producto.disponible + ' unidades\n\n';
+        mensaje_producto += 'Cuantas unidades quieres reservar?';
         
         stateManager.setStep(from, 'cantidad_producto', { 
             productoActual: producto 
@@ -501,15 +516,15 @@ class MessageHandler {
         
         if (isNaN(cantidad) || cantidad < 1) {
             return await whatsappService.sendMessage(from,
-                `Por favor, ingresa un numero valido.\n\n` +
-                `Cuantas unidades de *${producto.nombre}* quieres?`
+                'Por favor, ingresa un numero valido.\n\n' +
+                'Cuantas unidades de ' + producto.nombre + ' quieres?'
             );
         }
         
         if (cantidad > producto.disponible) {
             return await whatsappService.sendMessage(from,
-                `❌ Solo hay *${producto.disponible}* unidades disponibles.\n\n` +
-                `Cuantas quieres reservar?`
+                'Solo hay ' + producto.disponible + ' unidades disponibles.\n\n' +
+                'Cuantas quieres reservar?'
             );
         }
         
@@ -517,8 +532,8 @@ class MessageHandler {
         
         if (!resultado.success) {
             return await whatsappService.sendMessage(from,
-                `❌ ${resultado.error}\n\n` +
-                `Intenta con otra cantidad o escribe otro codigo.`
+                resultado.error + '\n\n' +
+                'Intenta con otra cantidad o escribe otro codigo.'
             );
         }
         
@@ -532,19 +547,19 @@ class MessageHandler {
         const cart = stateManager.getCart(from, session.businessId);
         const cartTotal = stateManager.getCartTotal(from, session.businessId);
         
-        let respuesta = `✅ *Reservado!*\n\n`;
-        respuesta += `${cantidad}x ${producto.nombre}\n`;
-        respuesta += `Subtotal: S/${(cantidad * producto.precio).toFixed(2)}\n\n`;
-        respuesta += `🛒 *Tu carrito (${cart.length} productos)*\n`;
-        respuesta += `Total: *S/${cartTotal.toFixed(2)}*\n\n`;
-        respuesta += `Que deseas hacer?`;
+        let respuesta = 'Reservado!\n\n';
+        respuesta += cantidad + 'x ' + producto.nombre + '\n';
+        respuesta += 'Subtotal: S/' + (cantidad * producto.precio).toFixed(2) + '\n\n';
+        respuesta += 'Tu carrito (' + cart.length + ' productos)\n';
+        respuesta += 'Total: S/' + cartTotal.toFixed(2) + '\n\n';
+        respuesta += 'Que deseas hacer?';
         
         stateManager.setStep(from, 'esperando_codigo');
         
         return await whatsappService.sendButtonMessage(from, respuesta, [
-            { title: 'Seguir comprando' },
-            { title: 'Pagar' },
-            { title: 'Ver carrito' }
+            { title: 'Seguir comprando', id: 'seguir' },
+            { title: 'Pagar', id: 'pagar' },
+            { title: 'Ver carrito', id: 'carrito' }
         ]);
     }
     
@@ -556,29 +571,29 @@ class MessageHandler {
         
         if (cart.length === 0) {
             return await whatsappService.sendMessage(from,
-                `🛒 Tu carrito esta vacio.\n\n` +
-                `Escribe el codigo de un producto del live para agregarlo.`
+                'Tu carrito esta vacio.\n\n' +
+                'Escribe el codigo de un producto del live para agregarlo.'
             );
         }
         
-        let mensaje = `🛒 *Tu carrito en ${negocio.nombre}*\n\n`;
+        let mensaje = 'Tu carrito en ' + negocio.nombre + '\n\n';
         
         cart.forEach((item, idx) => {
-            mensaje += `${idx + 1}. *${item.nombre}*\n`;
-            mensaje += `   ${item.cantidad} x S/${item.precio.toFixed(2)} = S/${item.subtotal.toFixed(2)}\n\n`;
+            mensaje += (idx + 1) + '. ' + item.nombre + '\n';
+            mensaje += '   ' + item.cantidad + ' x S/' + item.precio.toFixed(2) + ' = S/' + item.subtotal.toFixed(2) + '\n\n';
         });
         
         const total = stateManager.getCartTotal(from, businessId);
-        mensaje += `━━━━━━━━━━━━━━━━━\n`;
-        mensaje += `*TOTAL: S/${total.toFixed(2)}*\n\n`;
-        mensaje += `_Escribe otro codigo para agregar mas productos_`;
+        mensaje += '-------------------\n';
+        mensaje += 'TOTAL: S/' + total.toFixed(2) + '\n\n';
+        mensaje += 'Escribe otro codigo para agregar mas productos';
         
         stateManager.setStep(from, 'esperando_codigo');
         
         return await whatsappService.sendButtonMessage(from, mensaje, [
-            { title: 'Pagar' },
-            { title: 'Seguir comprando' },
-            { title: 'Vaciar carrito' }
+            { title: 'Pagar', id: 'pagar' },
+            { title: 'Seguir comprando', id: 'seguir' },
+            { title: 'Vaciar carrito', id: 'vaciar' }
         ]);
     }
     
@@ -589,8 +604,8 @@ class MessageHandler {
         
         if (cart.length === 0) {
             return await whatsappService.sendMessage(from,
-                `🛒 Tu carrito esta vacio.\n\n` +
-                `Escribe el codigo de un producto para agregarlo.`
+                'Tu carrito esta vacio.\n\n' +
+                'Escribe el codigo de un producto para agregarlo.'
             );
         }
         
@@ -605,9 +620,9 @@ class MessageHandler {
         stateManager.setStep(from, 'datos_nombre');
         
         return await whatsappService.sendMessage(from,
-            `📝 *Datos para tu pedido*\n\n` +
-            `Paso 1 de 3\n\n` +
-            `Cual es tu *nombre completo*?`
+            'Datos para tu pedido\n\n' +
+            'Paso 1 de 3\n\n' +
+            'Cual es tu nombre completo?'
         );
     }
     
@@ -615,27 +630,27 @@ class MessageHandler {
         const cart = stateManager.getCart(from, businessId);
         const total = stateManager.getCartTotal(from, businessId);
         
-        let mensaje = `📦 *Confirma tu pedido*\n\n`;
+        let mensaje = 'Confirma tu pedido\n\n';
         
-        mensaje += `*Productos:*\n`;
+        mensaje += 'Productos:\n';
         cart.forEach(item => {
-            mensaje += `• ${item.cantidad}x ${item.nombre} - S/${item.subtotal.toFixed(2)}\n`;
+            mensaje += '- ' + item.cantidad + 'x ' + item.nombre + ' - S/' + item.subtotal.toFixed(2) + '\n';
         });
-        mensaje += `\n*Total: S/${total.toFixed(2)}*\n\n`;
+        mensaje += '\nTotal: S/' + total.toFixed(2) + '\n\n';
         
-        mensaje += `*Datos de entrega:*\n`;
-        mensaje += `👤 ${cliente.nombre}\n`;
-        mensaje += `📍 ${cliente.direccion}\n`;
-        mensaje += `📱 ${cliente.telefono || 'No registrado'}\n\n`;
+        mensaje += 'Datos de entrega:\n';
+        mensaje += cliente.nombre + '\n';
+        mensaje += cliente.direccion + '\n';
+        mensaje += (cliente.telefono || 'No registrado') + '\n\n';
         
-        mensaje += `Los datos son correctos?`;
+        mensaje += 'Los datos son correctos?';
         
         stateManager.setStep(from, 'confirmar_pedido', { cliente });
         
         return await whatsappService.sendButtonMessage(from, mensaje, [
-            { title: 'Si, confirmar' },
-            { title: 'Editar datos' },
-            { title: 'Cancelar' }
+            { title: 'Si, confirmar', id: 'confirmar' },
+            { title: 'Editar datos', id: 'editar' },
+            { title: 'Cancelar', id: 'cancelar' }
         ]);
     }
     
@@ -644,17 +659,17 @@ class MessageHandler {
         
         if (nombre.length < 2) {
             return await whatsappService.sendMessage(from,
-                `Por favor, ingresa tu nombre completo.`
+                'Por favor, ingresa tu nombre completo.'
             );
         }
         
         stateManager.setStep(from, 'datos_direccion', { nombre });
         
         return await whatsappService.sendMessage(from,
-            `✅ Nombre: *${nombre}*\n\n` +
-            `Paso 2 de 3\n\n` +
-            `Cual es tu *direccion completa* de entrega?\n` +
-            `_Incluye distrito y referencia_`
+            'Nombre: ' + nombre + '\n\n' +
+            'Paso 2 de 3\n\n' +
+            'Cual es tu direccion completa de entrega?\n' +
+            'Incluye distrito y referencia'
         );
     }
     
@@ -663,17 +678,17 @@ class MessageHandler {
         
         if (direccion.length < 10) {
             return await whatsappService.sendMessage(from,
-                `Por favor, ingresa una direccion mas completa.\n` +
-                `Incluye calle, numero, distrito y referencia.`
+                'Por favor, ingresa una direccion mas completa.\n' +
+                'Incluye calle, numero, distrito y referencia.'
             );
         }
         
         stateManager.setStep(from, 'datos_telefono', { direccion });
         
         return await whatsappService.sendMessage(from,
-            `✅ Direccion: *${direccion}*\n\n` +
-            `Paso 3 de 3\n\n` +
-            `Cual es tu *numero de telefono* de contacto?`
+            'Direccion: ' + direccion + '\n\n' +
+            'Paso 3 de 3\n\n' +
+            'Cual es tu numero de telefono de contacto?'
         );
     }
     
@@ -683,7 +698,7 @@ class MessageHandler {
         
         if (telefono.length < 7) {
             return await whatsappService.sendMessage(from,
-                `Por favor, ingresa un numero de telefono valido.`
+                'Por favor, ingresa un numero de telefono valido.'
             );
         }
         
@@ -716,23 +731,23 @@ class MessageHandler {
         
         if (!resultado.success) {
             return await whatsappService.sendMessage(from,
-                `❌ Error creando el pedido. Por favor, intenta nuevamente.`
+                'Error creando el pedido. Por favor, intenta nuevamente.'
             );
         }
         
         stateManager.clearCart(from, businessId);
         
-        let mensaje = `🎉 *Pedido creado!*\n\n`;
-        mensaje += `📦 Codigo: *${resultado.pedidoId}*\n\n`;
-        mensaje += `*Productos:*\n`;
+        let mensaje = 'Pedido creado!\n\n';
+        mensaje += 'Codigo: ' + resultado.pedidoId + '\n\n';
+        mensaje += 'Productos:\n';
         cart.forEach(item => {
-            mensaje += `• ${item.cantidad}x ${item.nombre}\n`;
+            mensaje += '- ' + item.cantidad + 'x ' + item.nombre + '\n';
         });
-        mensaje += `\n*Total: S/${total.toFixed(2)}*\n\n`;
-        mensaje += `📍 *Entrega en:*\n${cliente.direccion}\n\n`;
-        mensaje += `💳 *Para confirmar tu pedido:*\n`;
-        mensaje += `Envia el voucher de tu pago a este chat.\n\n`;
-        mensaje += `Tienes 30 minutos para completar el pago.`;
+        mensaje += '\nTotal: S/' + total.toFixed(2) + '\n\n';
+        mensaje += 'Entrega en:\n' + cliente.direccion + '\n\n';
+        mensaje += 'Para confirmar tu pedido:\n';
+        mensaje += 'Envia el voucher de tu pago a este chat.\n\n';
+        mensaje += 'Tienes 30 minutos para completar el pago.';
         
         stateManager.setStep(from, 'esperando_voucher', { 
             pedidoId: resultado.pedidoId 
@@ -751,8 +766,8 @@ class MessageHandler {
         
         if (!mediaUrl) {
             return await whatsappService.sendMessage(from,
-                `📸 Por favor, envia una *imagen* de tu voucher de pago.\n\n` +
-                `Tu codigo de pedido es: *${pedidoId}*`
+                'Por favor, envia una imagen de tu voucher de pago.\n\n' +
+                'Tu codigo de pedido es: ' + pedidoId
             );
         }
         
@@ -766,10 +781,10 @@ class MessageHandler {
         stateManager.setStep(from, 'esperando_codigo');
         
         return await whatsappService.sendMessage(from,
-            `✅ *Voucher recibido!*\n\n` +
-            `Tu pedido *${pedidoId}* esta siendo verificado.\n\n` +
-            `Te notificaremos cuando sea confirmado.\n\n` +
-            `Gracias por tu compra! 🎉`
+            'Voucher recibido!\n\n' +
+            'Tu pedido ' + pedidoId + ' esta siendo verificado.\n\n' +
+            'Te notificaremos cuando sea confirmado.\n\n' +
+            'Gracias por tu compra!'
         );
     }
 }
