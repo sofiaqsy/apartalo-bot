@@ -1,11 +1,13 @@
 /**
  * Admin Routes - API de Administración
- * Gestión de productos, pedidos y negocios
+ * Gestión de productos, pedidos, negocios y LIVE Commerce
  */
 
 const express = require('express');
 const router = express.Router();
 const sheetsService = require('./sheets-service');
+const liveManager = require('./live-manager');
+const whatsappService = require('./whatsapp-service');
 
 // ========================================
 // NEGOCIOS
@@ -63,7 +65,7 @@ router.get('/:businessId/productos', async (req, res) => {
         const { businessId } = req.params;
         const { estado, disponible } = req.query;
         
-        let productos = await sheetsService.getInventory(businessId);
+        let productos = await sheetsService.getInventory(businessId, true);
         
         // Filtrar por estado si se especifica
         if (estado) {
@@ -108,15 +110,15 @@ router.post('/:businessId/productos', async (req, res) => {
         const { businessId } = req.params;
         const { codigo, nombre, descripcion, precio, stock, imagenUrl } = req.body;
         
-        if (!codigo || !nombre || precio === undefined || stock === undefined) {
+        if (!nombre || precio === undefined || stock === undefined) {
             return res.status(400).json({ 
                 success: false, 
-                error: 'Campos requeridos: codigo, nombre, precio, stock' 
+                error: 'Campos requeridos: nombre, precio, stock' 
             });
         }
         
         const result = await sheetsService.createProduct(businessId, {
-            codigo,
+            codigo: codigo || null,
             nombre,
             descripcion: descripcion || '',
             precio: parseFloat(precio),
@@ -184,6 +186,192 @@ router.post('/:businessId/productos/:codigo/liberar', async (req, res) => {
         
         const result = await sheetsService.releaseStock(businessId, codigo, parseInt(cantidad));
         res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ========================================
+// LIVE COMMERCE
+// ========================================
+
+// GET /api/:businessId/live/stats - Estadísticas del LIVE
+router.get('/:businessId/live/stats', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const stats = liveManager.getStats(businessId);
+        
+        res.json({
+            success: true,
+            businessId,
+            data: stats
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// GET /api/:businessId/live/subscribers - Lista de suscritos
+router.get('/:businessId/live/subscribers', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const subscribers = liveManager.getSubscribers(businessId);
+        
+        res.json({
+            success: true,
+            businessId,
+            count: subscribers.length,
+            data: subscribers
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST /api/:businessId/live/broadcast/:codigo - Enviar producto a todos los suscritos
+router.post('/:businessId/live/broadcast/:codigo', async (req, res) => {
+    try {
+        const { businessId, codigo } = req.params;
+        
+        // Obtener producto
+        const producto = await sheetsService.getProductByCode(businessId, codigo);
+        if (!producto) {
+            return res.status(404).json({ success: false, error: 'Producto no encontrado' });
+        }
+        
+        if (producto.disponible < 1) {
+            return res.status(400).json({ success: false, error: 'Producto sin stock disponible' });
+        }
+        
+        // Obtener suscritos activos
+        const subscribers = liveManager.getSubscribers(businessId);
+        
+        if (subscribers.length === 0) {
+            return res.status(400).json({ 
+                success: false, 
+                error: 'No hay usuarios suscritos al LIVE' 
+            });
+        }
+        
+        // Publicar producto en el live manager
+        liveManager.publishProduct(businessId, producto);
+        
+        // Enviar mensaje a cada suscrito
+        const negocio = sheetsService.getBusiness(businessId);
+        let enviados = 0;
+        let errores = 0;
+        
+        for (const sub of subscribers) {
+            try {
+                // Crear mensaje con botón de reserva
+                let mensaje = `🔴 *¡PRODUCTO EN VIVO!*\n\n`;
+                mensaje += `📦 *${producto.nombre}*\n`;
+                if (producto.descripcion) {
+                    mensaje += `📝 ${producto.descripcion}\n`;
+                }
+                mensaje += `💰 *S/${producto.precio.toFixed(2)}*\n`;
+                mensaje += `📊 Stock: ${producto.disponible} unidad(es)\n\n`;
+                mensaje += `⚡ *¡El primero en tocar se lo lleva!*`;
+                
+                // Enviar con imagen si tiene
+                if (producto.imagenUrl) {
+                    await whatsappService.sendImageMessage(sub.whatsapp, producto.imagenUrl, mensaje);
+                }
+                
+                // Enviar botón de reserva
+                await whatsappService.sendButtonMessage(sub.whatsapp, 
+                    producto.imagenUrl ? '¿Lo quieres?' : mensaje,
+                    [{ 
+                        title: '🛒 ¡LO QUIERO!',
+                        id: `RESERVAR_${businessId}_${producto.codigo}`
+                    }]
+                );
+                
+                enviados++;
+            } catch (err) {
+                console.error(`Error enviando a ${sub.whatsapp}:`, err.message);
+                errores++;
+            }
+        }
+        
+        res.json({
+            success: true,
+            message: `Producto enviado a ${enviados} usuarios`,
+            data: {
+                producto: producto.codigo,
+                subscribersTotal: subscribers.length,
+                enviados,
+                errores
+            }
+        });
+        
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// GET /api/:businessId/live/products - Productos activos en el LIVE
+router.get('/:businessId/live/products', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const products = liveManager.getLiveProducts(businessId);
+        
+        res.json({
+            success: true,
+            businessId,
+            count: products.length,
+            data: products
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// DELETE /api/:businessId/live/products/:codigo - Quitar producto del LIVE
+router.delete('/:businessId/live/products/:codigo', async (req, res) => {
+    try {
+        const { businessId, codigo } = req.params;
+        const cleared = liveManager.clearLiveProduct(businessId, codigo);
+        
+        res.json({
+            success: cleared,
+            message: cleared ? 'Producto removido del LIVE' : 'Producto no encontrado en LIVE'
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST /api/:businessId/live/notify - Notificar a todos los suscritos (mensaje personalizado)
+router.post('/:businessId/live/notify', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const { mensaje } = req.body;
+        
+        if (!mensaje) {
+            return res.status(400).json({ success: false, error: 'Mensaje requerido' });
+        }
+        
+        const subscribers = liveManager.getSubscribers(businessId);
+        const negocio = sheetsService.getBusiness(businessId);
+        
+        let enviados = 0;
+        for (const sub of subscribers) {
+            try {
+                await whatsappService.sendMessage(sub.whatsapp, 
+                    `📢 *${negocio.nombre}*\n\n${mensaje}`
+                );
+                enviados++;
+            } catch (err) {
+                console.error(`Error enviando a ${sub.whatsapp}:`, err.message);
+            }
+        }
+        
+        res.json({
+            success: true,
+            message: `Notificación enviada a ${enviados} usuarios`,
+            enviados
+        });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
