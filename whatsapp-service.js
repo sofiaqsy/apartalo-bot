@@ -1,6 +1,10 @@
 /**
  * WhatsApp Cloud API Service
  * Envio de mensajes y manejo de la API de WhatsApp Business
+ * 
+ * ✨ MEJORADO v1.3.1: Función sendProductLiveMessage 
+ * Envía producto en UN SOLO MENSAJE con imagen + detalles + botón
+ * SIN mensaje extra "Toca el boton para reservar"
  */
 
 const axios = require('axios');
@@ -172,6 +176,9 @@ class WhatsAppService {
         }
     }
     
+    // ✨ NUEVA FUNCIÓN MEJORADA: Enviar producto en VIVO en UN SOLO MENSAJE
+    // Estructura: [IMAGEN (header)] + [DETALLES (body)] + [BOTÓN (action)]
+    // NO incluye el mensaje extra "Toca el boton para reservar"
     async sendProductLiveMessage(to, producto) {
         const phoneNumber = this.cleanPhone(to);
         
@@ -181,6 +188,10 @@ class WhatsAppService {
             console.log('Para:', phoneNumber);
             console.log('Producto:', producto.nombre);
             console.log('Precio: S/' + producto.precio.toFixed(2));
+            console.log('Stock: ' + producto.disponible + ' unidades');
+            if (producto.imagenUrl) {
+                console.log('Imagen: ' + producto.imagenUrl.substring(0, 50) + '...');
+            }
             console.log('='.repeat(60) + '\n');
             return { status: 'simulated' };
         }
@@ -188,14 +199,17 @@ class WhatsAppService {
         try {
             const url = `${this.apiUrl}/${this.apiVersion}/${this.phoneId}/messages`;
             
-            // Construir mensaje con detalles del producto
-            let bodyText = `*${producto.nombre}*\n`;
+            // Construir el body SOLO con detalles del producto
+            // (sin "Toca el boton para reservar")
+            let bodyText = `*${producto.nombre}*`;
+            
             if (producto.descripcion) {
-                bodyText += `${producto.descripcion}\n`;
+                bodyText += `\n${producto.descripcion}`;
             }
-            bodyText += `\nPrecio: S/${producto.precio.toFixed(2)}\n`;
-            bodyText += `Stock: ${producto.disponible} unidades\n`;
-            bodyText += `\n⚡ El primero en tocar "ApartaLo" se lo lleva`;
+            
+            bodyText += `\n\nPrecio: S/${producto.precio.toFixed(2)}`;
+            bodyText += `\nStock: ${producto.disponible} unidades`;
+            bodyText += `\n\n⚡ El primero en tocar se lo lleva`;
             
             const payload = {
                 messaging_product: 'whatsapp',
