@@ -303,28 +303,11 @@ router.post('/:businessId/live/broadcast/:codigo', async (req, res) => {
         
         for (const sub of subscribers) {
             try {
-                // Crear mensaje SIN emojis y SIN stock
-                let mensaje = `\n`;
-                mensaje += `*${producto.nombre}*\n`;
-                if (producto.descripcion) {
-                    mensaje += `${producto.descripcion}\n`;
-                }
-                mensaje += `Precio: S/${producto.precio.toFixed(2)}\n\n`;
-                mensaje += `El primero en tocar se lo lleva`;
-                
-                // Enviar con imagen si tiene
-                if (producto.imagenUrl) {
-                    await whatsappService.sendImageMessage(sub.whatsapp, producto.imagenUrl, mensaje);
-                }
-                
-                // Enviar boton de reserva con texto "ApartaLo"
-                await whatsappService.sendButtonMessage(sub.whatsapp, 
-                    producto.imagenUrl ? 'Toca el boton para reservar' : mensaje,
-                    [{ 
-                        title: 'ApartaLo',
-                        id: `RESERVAR_${businessId}_${producto.codigo}`
-                    }]
-                );
+                // Enviar producto completo en UN SOLO mensaje
+                await whatsappService.sendProductLiveMessage(sub.whatsapp, {
+                    ...producto,
+                    businessId: businessId
+                });
                 
                 enviados++;
             } catch (err) {
