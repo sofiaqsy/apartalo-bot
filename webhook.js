@@ -53,6 +53,7 @@ router.post('/', async (req, res) => {
                                 
                                 let messageBody = '';
                                 let mediaUrl = null;
+                                let interactiveData = null;
                                 
                                 switch (message.type) {
                                     case 'text':
@@ -66,8 +67,19 @@ router.post('/', async (req, res) => {
                                         
                                     case 'interactive':
                                         if (message.interactive.type === 'button_reply') {
-                                            messageBody = message.interactive.button_reply.title;
+                                            // Usar el ID del boton, no el titulo
+                                            interactiveData = {
+                                                type: 'button_reply',
+                                                id: message.interactive.button_reply.id,
+                                                title: message.interactive.button_reply.title
+                                            };
+                                            messageBody = message.interactive.button_reply.id;
                                         } else if (message.interactive.type === 'list_reply') {
+                                            interactiveData = {
+                                                type: 'list_reply',
+                                                id: message.interactive.list_reply.id,
+                                                title: message.interactive.list_reply.title
+                                            };
                                             messageBody = message.interactive.list_reply.id;
                                         }
                                         break;
@@ -77,11 +89,14 @@ router.post('/', async (req, res) => {
                                 }
                                 
                                 console.log(`\n📱 Mensaje de ${from}: ${messageBody}`);
+                                if (interactiveData) {
+                                    console.log(`   Interactive ID: ${interactiveData.id}`);
+                                }
                                 
                                 const formattedFrom = `whatsapp:+${from}`;
                                 
                                 try {
-                                    await messageHandler.handleMessage(formattedFrom, messageBody, mediaUrl);
+                                    await messageHandler.handleMessage(formattedFrom, messageBody, mediaUrl, interactiveData);
                                 } catch (error) {
                                     console.error('❌ Error procesando mensaje:', error);
                                 }
