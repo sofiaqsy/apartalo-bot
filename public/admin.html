@@ -570,7 +570,7 @@
             // Agregar sección de voucher si existe
             let voucherHtml = '';
             if (currentOrder.voucherUrl) {
-                voucherHtml = `<hr style="border-color:#3a3a5a;margin:12px 0"><p><strong>📸 Comprobante:</strong></p><a href="${currentOrder.voucherUrl}" target="_blank" style="color:var(--primary);text-decoration:none"><img src="${currentOrder.voucherUrl}" style="width:100%;max-width:400px;border-radius:8px;margin-top:8px;cursor:pointer" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><p style="display:none;color:var(--primary);margin-top:8px">🔗 Ver comprobante</p></a>`;
+                voucherHtml = `<hr style="border-color:#3a3a5a;margin:12px 0"><p><strong>📸 Comprobante:</strong></p><div style="margin-top:12px;text-align:center"><img src="${currentOrder.voucherUrl}" style="width:100%;max-width:500px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3);cursor:pointer" onclick="window.open('${currentOrder.voucherUrl}', '_blank')" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><p style="display:none;color:var(--danger);margin-top:12px">❌ Error al cargar la imagen. <a href="${currentOrder.voucherUrl}" target="_blank" style="color:var(--primary)">Ver enlace</a></p></div>`;
             } else if (currentOrder.estado === 'PENDIENTE_PAGO') {
                 voucherHtml = `<hr style="border-color:#3a3a5a;margin:12px 0"><p style="color:var(--text-muted)">📸 Esperando comprobante de pago</p>`;
             }
