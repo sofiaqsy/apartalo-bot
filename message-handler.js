@@ -392,14 +392,14 @@ class MessageHandler {
         mensaje += 'S/' + resultado.producto.precio.toFixed(2) + '\n\n';
         
         if (esNuevoPedido) {
-            mensaje += '📦 Pedido creado: ' + pedidoId + '\n';
+            mensaje += 'Pedido creado: ' + pedidoId + '\n';
         } else {
-            mensaje += '📦 Agregado al pedido: ' + pedidoId + '\n';
+            mensaje += 'Agregado al pedido: ' + pedidoId + '\n';
         }
         
-        mensaje += '🛒 Productos en tu pedido: ' + numProductos + '\n';
+        mensaje += 'Productos en tu pedido: ' + numProductos + '\n';
         mensaje += 'Total: S/' + pedido.total.toFixed(2) + '\n\n';
-        mensaje += '⏰ Tienes 30 minutos para pagar\n\n';
+        mensaje += 'Tienes 30 minutos para pagar\n\n';
         mensaje += '¿Que deseas hacer?';
         
         stateManager.setStep(from, 'esperando_codigo');
@@ -594,13 +594,13 @@ class MessageHandler {
     
     formatearEstado(estado) {
         const estados = {
-            'PENDIENTE_PAGO': '⏳ Pendiente de pago',
-            'PENDIENTE_VALIDACION': '🔍 Validando voucher',
-            'CONFIRMADO': '✅ Confirmado',
-            'EN_PREPARACION': '📦 En preparacion',
-            'ENVIADO': '🚚 Enviado',
-            'ENTREGADO': '✅ Entregado',
-            'CANCELADO': '❌ Cancelado'
+            'PENDIENTE_PAGO': 'Pendiente de pago',
+            'PENDIENTE_VALIDACION': 'Validando voucher',
+            'CONFIRMADO': 'Confirmado',
+            'EN_PREPARACION': 'En preparacion',
+            'ENVIADO': 'Enviado',
+            'ENTREGADO': 'Entregado',
+            'CANCELADO': 'Cancelado'
         };
         return estados[estado] || estado;
     }
