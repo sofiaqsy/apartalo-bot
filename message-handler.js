@@ -75,20 +75,6 @@ class MessageHandler {
             return await this.mostrarMenuNegocio(from, session.businessId);
         }
         
-        if (mensajeLower === 'listo' && session.step === 'esperando_voucher') {
-            // Finalizar envío de comprobantes
-            const pedidoId = session.data?.pedidoId;
-            stateManager.clearActivePedido(from);
-            stateManager.setStep(from, 'esperando_codigo');
-            
-            return await whatsappService.sendMessage(from,
-                '✅ Perfecto!\n\n' +
-                'Tu pedido ' + (pedidoId || '') + ' está siendo verificado.\n\n' +
-                'Te notificaremos cuando sea confirmado.\n\n' +
-                'Gracias por tu compra! 🎉'
-            );
-        }
-        
         // COMANDOS DE LIVE
         if (mensajeLower === 'live 5' || mensajeLower === 'live5' || mensajeLower === 'live 5 min') {
             return await this.suscribirAlLive(from, 5);
@@ -1060,18 +1046,16 @@ class MessageHandler {
         
         const totalVouchers = vouchersActuales + 1;
         
+        // Limpiar el pedido activo y volver al flujo regular
+        stateManager.clearActivePedido(from);
+        stateManager.setStep(from, 'esperando_codigo');
+        
         let mensaje_respuesta = '✅ Comprobante recibido!\n\n';
         mensaje_respuesta += 'Pedido: ' + pedidoId + '\n';
         mensaje_respuesta += 'Comprobantes enviados: ' + totalVouchers + '\n\n';
-        
-        if (totalVouchers === 1) {
-            mensaje_respuesta += 'Tu pedido está siendo verificado.\n\n';
-            mensaje_respuesta += 'Si necesitas enviar otro comprobante (corregido o adicional), puedes enviarlo ahora.';
-            // Mantener el step para permitir más vouchers
-        } else {
-            mensaje_respuesta += 'Comprobante adicional agregado.\n\n';
-            mensaje_respuesta += 'Puedes enviar más comprobantes si lo necesitas, o escribe "listo" para finalizar.';
-        }
+        mensaje_respuesta += 'Tu pedido está siendo verificado.\n\n';
+        mensaje_respuesta += 'Te notificaremos cuando sea confirmado.\n\n';
+        mensaje_respuesta += 'Gracias por tu compra! 🎉';
         
         return await whatsappService.sendMessage(from, mensaje_respuesta);
     }

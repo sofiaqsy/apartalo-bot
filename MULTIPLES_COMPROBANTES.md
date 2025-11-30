@@ -24,7 +24,7 @@ Los URLs se separan con `|` (pipe).
 
 ### 2. Flujo del Usuario
 
-#### Primera vez que envía comprobante:
+#### Envío de comprobante:
 ```
 Usuario: [envía imagen]
 Bot: ✅ Comprobante recibido!
@@ -34,11 +34,20 @@ Bot: ✅ Comprobante recibido!
      
      Tu pedido está siendo verificado.
      
-     Si necesitas enviar otro comprobante (corregido o adicional), 
-     puedes enviarlo ahora.
+     Te notificaremos cuando sea confirmado.
+     
+     Gracias por tu compra! 🎉
 ```
 
-#### Enviar comprobantes adicionales:
+Después de enviar el comprobante:
+- El usuario vuelve automáticamente al flujo regular
+- Puede seguir comprando escribiendo códigos de productos
+- Puede escribir "hola" para ver el menú principal
+- Puede escribir "carrito" para ver su carrito
+
+#### Enviar múltiples comprobantes:
+Si el usuario necesita enviar otro comprobante para el mismo pedido:
+
 ```
 Usuario: [envía otra imagen]
 Bot: ✅ Comprobante recibido!
@@ -46,23 +55,17 @@ Bot: ✅ Comprobante recibido!
      Pedido: PL-874271
      Comprobantes enviados: 2
      
-     Comprobante adicional agregado.
-     
-     Puedes enviar más comprobantes si lo necesitas, 
-     o escribe "listo" para finalizar.
-```
-
-#### Finalizar:
-```
-Usuario: listo
-Bot: ✅ Perfecto!
-     
-     Tu pedido PL-874271 está siendo verificado.
+     Tu pedido está siendo verificado.
      
      Te notificaremos cuando sea confirmado.
      
      Gracias por tu compra! 🎉
 ```
+
+El sistema:
+- Detecta automáticamente que hay un pedido pendiente
+- Agrega el nuevo comprobante al mismo pedido
+- Vuelve al flujo regular
 
 ### 3. Panel Admin (PWA)
 
@@ -112,8 +115,7 @@ Estados válidos para recibir más comprobantes:
 
 | Comando | Acción |
 |---------|--------|
-| `[envía imagen]` | Agrega comprobante al pedido pendiente |
-| `listo` | Finaliza el envío de comprobantes |
+| `[envía imagen]` | Agrega comprobante al pedido pendiente y vuelve al flujo regular |
 | `cancelar` | Cancela y limpia el pedido |
 
 ## Casos de Uso
@@ -130,10 +132,10 @@ Estados válidos para recibir más comprobantes:
 ```
 1. Usuario debe pagar S/200
 2. Transfiere S/100 desde cuenta A
-3. Envía comprobante A
-4. Transfiere S/100 desde cuenta B
-5. Envía comprobante B
-6. Escribe "listo"
+3. Envía comprobante A → Vuelve al flujo regular
+4. Usuario recuerda que falta
+5. Transfiere S/100 desde cuenta B
+6. Envía comprobante B → Sistema detecta pedido pendiente y agrega
 7. Admin valida ambos comprobantes
 ```
 
