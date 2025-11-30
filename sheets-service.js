@@ -12,6 +12,7 @@ class SheetsService {
         this.auth = null;
         this.initialized = false;
         this.businessCache = new Map();
+        this.whatsappToBusinessMap = new Map(); // Mapeo número WhatsApp -> businessId
     }
     
     async initialize() {
@@ -59,19 +60,23 @@ class SheetsService {
     
     async loadBusinesses() {
         try {
+            // Rango extendido para incluir columna H (whatsappNumber)
             const response = await this.sheets.spreadsheets.values.get({
                 spreadsheetId: this.masterSpreadsheetId,
-                range: 'Negocios!A:G'
+                range: 'Negocios!A:H'
             });
             
             const rows = response.data.values || [];
             this.businessCache.clear();
+            this.whatsappToBusinessMap.clear();
             
             for (let i = 1; i < rows.length; i++) {
                 const row = rows[i];
                 const estado = (row[6] || 'ACTIVO').toUpperCase();
                 
                 if (estado === 'ACTIVO') {
+                    const whatsappNumber = (row[7] || '').replace(/[^0-9]/g, '');
+                    
                     const business = {
                         id: row[0] || '',
                         nombre: row[1] || '',
@@ -79,11 +84,19 @@ class SheetsService {
                         spreadsheetId: row[3] || '',
                         descripcion: row[4] || '',
                         logoUrl: row[5] || '',
-                        estado: estado
+                        estado: estado,
+                        whatsappNumber: whatsappNumber
                     };
                     
                     this.businessCache.set(business.id, business);
-                    console.log(`   📦 ${business.nombre} (${business.prefijo})`);
+                    
+                    // Mapear número de WhatsApp al negocio
+                    if (whatsappNumber) {
+                        this.whatsappToBusinessMap.set(whatsappNumber, business.id);
+                        console.log(`   📦 ${business.nombre} (${business.prefijo}) - WhatsApp: ${whatsappNumber}`);
+                    } else {
+                        console.log(`   📦 ${business.nombre} (${business.prefijo})`);
+                    }
                 }
             }
             
@@ -105,6 +118,32 @@ class SheetsService {
     getBusinessByPrefix(prefix) {
         for (const business of this.businessCache.values()) {
             if (business.prefijo.toUpperCase() === prefix.toUpperCase()) {
+                return business;
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Obtener negocio por número de WhatsApp del bot
+     * @param {string} phoneNumberId - ID del número de teléfono de WhatsApp
+     * @returns {Object|null} - Negocio asociado o null
+     */
+    getBusinessByWhatsappNumber(phoneNumber) {
+        const cleanNumber = (phoneNumber || '').replace(/[^0-9]/g, '');
+        const businessId = this.whatsappToBusinessMap.get(cleanNumber);
+        return businessId ? this.getBusiness(businessId) : null;
+    }
+    
+    /**
+     * Obtener negocio por Phone Number ID de la API de WhatsApp
+     * @param {string} phoneNumberId - Phone Number ID de WhatsApp Cloud API
+     * @returns {Object|null} - Negocio asociado o null
+     */
+    getBusinessByPhoneNumberId(phoneNumberId) {
+        // Buscar en los negocios por el Phone Number ID almacenado
+        for (const business of this.businessCache.values()) {
+            if (business.whatsappNumber === phoneNumberId) {
                 return business;
             }
         }
