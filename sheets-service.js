@@ -659,11 +659,17 @@ class SheetsService {
             
             console.log(`✅ Imagen subida a Drive: ${file.data.id}`);
             
+            // Generar múltiples formatos de URL
+            const fileId = file.data.id;
+            
             return {
                 success: true,
-                fileId: file.data.id,
+                fileId: fileId,
                 webViewLink: file.data.webViewLink,
-                directLink: `https://drive.google.com/uc?export=view&id=${file.data.id}`
+                // URL directa para mostrar en <img> (funciona mejor para imágenes)
+                directLink: `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`,
+                // URL alternativa
+                downloadLink: `https://drive.google.com/uc?export=download&id=${fileId}`
             };
             
         } catch (error) {

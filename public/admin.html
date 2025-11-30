@@ -570,7 +570,22 @@
             // Agregar sección de voucher si existe
             let voucherHtml = '';
             if (currentOrder.voucherUrl) {
-                voucherHtml = `<hr style="border-color:#3a3a5a;margin:12px 0"><p><strong>📸 Comprobante:</strong></p><div style="margin-top:12px;text-align:center"><img src="${currentOrder.voucherUrl}" style="width:100%;max-width:500px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3);cursor:pointer" onclick="window.open('${currentOrder.voucherUrl}', '_blank')" onerror="this.style.display='none';this.nextElementSibling.style.display='block'"><p style="display:none;color:var(--danger);margin-top:12px">❌ Error al cargar la imagen. <a href="${currentOrder.voucherUrl}" target="_blank" style="color:var(--primary)">Ver enlace</a></p></div>`;
+                // Extraer fileId si es URL de Drive y generar URLs alternativas
+                let imageUrl = currentOrder.voucherUrl;
+                let altUrls = [];
+                
+                const driveMatch = currentOrder.voucherUrl.match(/[\/=]([a-zA-Z0-9_-]{25,})/);
+                if (driveMatch && driveMatch[1]) {
+                    const fileId = driveMatch[1];
+                    imageUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`;
+                    altUrls = [
+                        `https://drive.google.com/uc?export=view&id=${fileId}`,
+                        `https://lh3.googleusercontent.com/d/${fileId}`,
+                        currentOrder.voucherUrl
+                    ];
+                }
+                
+                voucherHtml = `<hr style="border-color:#3a3a5a;margin:12px 0"><p><strong>📸 Comprobante:</strong></p><div style="margin-top:12px;text-align:center"><img id="voucher-img" src="${imageUrl}" style="width:100%;max-width:500px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.3);cursor:pointer" onclick="window.open('${currentOrder.voucherUrl}', '_blank')" onerror="tryAltVoucherUrl(this, ${JSON.stringify(altUrls)})"><p id="voucher-error" style="display:none;color:var(--danger);margin-top:12px">❌ Error al cargar la imagen. <a href="${currentOrder.voucherUrl}" target="_blank" style="color:var(--primary)">Abrir en Drive</a></p></div>`;
             } else if (currentOrder.estado === 'PENDIENTE_PAGO') {
                 voucherHtml = `<hr style="border-color:#3a3a5a;margin:12px 0"><p style="color:var(--text-muted)">📸 Esperando comprobante de pago</p>`;
             }
@@ -579,6 +594,20 @@
             selectedStatus = currentOrder.estado;
             document.getElementById('status-options').innerHTML = ESTADOS.map(e => `<div class="status-option status-${e.id} ${e.id === selectedStatus ? 'selected' : ''}" onclick="selectStatus('${e.id}')">${e.label}</div>`).join('');
             openModal('modal-order');
+        }
+        
+        function tryAltVoucherUrl(img, altUrls) {
+            if (altUrls && altUrls.length > 0) {
+                const nextUrl = altUrls.shift();
+                console.log('Intentando URL alternativa:', nextUrl);
+                img.onerror = () => tryAltVoucherUrl(img, altUrls);
+                img.src = nextUrl;
+            } else {
+                // No hay más URLs, mostrar error
+                img.style.display = 'none';
+                const errorEl = document.getElementById('voucher-error');
+                if (errorEl) errorEl.style.display = 'block';
+            }
         }
         
         function selectStatus(status) {
