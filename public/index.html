@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ApartaLo - Live Shopping</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/css/landing.css">
+</head>
+<body>
+    <!-- HOME VIEW -->
+    <div id="homeView" class="view active">
+        <section class="hero">
+            <h1>Live Shopping Ahora</h1>
+            <p>Productos únicos. Primera persona gana.</p>
+        </section>
+
+        <div class="container">
+            <h2 class="section-title">En Vivo Ahora</h2>
+            <div class="loading" id="homeLoading">
+                <div class="spinner"></div>
+                <p style="margin-top: 1rem;">Cargando negocios...</p>
+            </div>
+            <div class="business-grid" id="businessGrid"></div>
+        </div>
+    </div>
+
+    <!-- PRODUCTS VIEW -->
+    <div id="productsView" class="view">
+        <div class="products-header">
+            <div class="header-content">
+                <button class="back-button" onclick="goBack()">← Volver</button>
+                <span class="header-title">ApartaLo</span>
+                <button class="share-button" onclick="shareLink()">📤 Compartir</button>
+            </div>
+        </div>
+
+        <div class="products-container">
+            <div class="side-content left">
+                <div class="info-box">
+                    <h3 class="info-title">¿Cómo Funciona?</h3>
+                    
+                    <div class="info-step">
+                        <div class="step-number">1</div>
+                        <div class="step-content">
+                            <div class="step-title">Mira el Live</div>
+                            <div class="step-desc">Cada producto se muestra por 60 segundos</div>
+                        </div>
+                    </div>
+                    
+                    <div class="info-step">
+                        <div class="step-number">2</div>
+                        <div class="step-content">
+                            <div class="step-title">¡Apártalo Rápido!</div>
+                            <div class="step-desc">Presiona el botón antes que se acabe el tiempo</div>
+                        </div>
+                    </div>
+                    
+                    <div class="info-step">
+                        <div class="step-number">3</div>
+                        <div class="step-content">
+                            <div class="step-title">Primera Persona Gana</div>
+                            <div class="step-desc">Sin esperas, sin competencia</div>
+                        </div>
+                    </div>
+                    
+                    <div class="info-step">
+                        <div class="step-number">4</div>
+                        <div class="step-content">
+                            <div class="step-title">WhatsApp Directo</div>
+                            <div class="step-desc">Te contactamos inmediatamente para coordinar</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="highlight-box">
+                    <div class="highlight-title">⚡ Productos Únicos</div>
+                    <div class="highlight-text">
+                        Cada artículo es una sola unidad. Una vez apartado, nadie más puede comprarlo.
+                    </div>
+                </div>
+            </div>
+            
+            <div class="products-feed" id="productsFeed">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p style="margin-top: 1rem;">Cargando productos...</p>
+                </div>
+            </div>
+            
+            <div class="side-content right">
+                <div class="info-box">
+                    <h3 class="info-title">Beneficios</h3>
+                    
+                    <ul class="benefits-list">
+                        <li class="benefit-item">
+                            <span class="benefit-icon">✓</span>
+                            <span>Sin regateos ni negociaciones</span>
+                        </li>
+                        <li class="benefit-item">
+                            <span class="benefit-icon">✓</span>
+                            <span>Productos verificados y únicos</span>
+                        </li>
+                        <li class="benefit-item">
+                            <span class="benefit-icon">✓</span>
+                            <span>Proceso simple y rápido</span>
+                        </li>
+                        <li class="benefit-item">
+                            <span class="benefit-icon">✓</span>
+                            <span>Atención personalizada por WhatsApp</span>
+                        </li>
+                        <li class="benefit-item">
+                            <span class="benefit-icon">✓</span>
+                            <span>Sincronizado con TikTok en vivo</span>
+                        </li>
+                        <li class="benefit-item">
+                            <span class="benefit-icon">✓</span>
+                            <span>Garantía del vendedor</span>
+                        </li>
+                    </ul>
+                </div>
+                
+                <div class="highlight-box">
+                    <div class="highlight-title">💬 Contacto Inmediato</div>
+                    <div class="highlight-text">
+                        Al apartar, el vendedor te contacta por WhatsApp para coordinar pago y entrega.
+                    </div>
+                </div>
+                
+                <div class="highlight-box">
+                    <div class="highlight-title">⏱️ Tiempo Limitado</div>
+                    <div class="highlight-text">
+                        60 segundos por producto. Si nadie lo aparta, pasa al siguiente automáticamente.
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Winner Overlay -->
+    <div class="winner-overlay" id="winnerOverlay">
+        <div class="winner-content">
+            <div class="winner-icon">✓</div>
+            <div class="winner-text">¡APARTADO!</div>
+            <div class="winner-subtext">Redirigiendo a WhatsApp...</div>
+            <div class="next-timer" id="nextTimer">3</div>
+        </div>
+    </div>
+
+    <script src="/js/landing.js"></script>
+</body>
+</html>
