@@ -16,6 +16,7 @@ const sheetsService = require('./sheets-service');
 const stateManager = require('./state-manager');
 const webhookRoute = require('./webhook');
 const adminRoutes = require('./admin-routes');
+const landingApi = require('./landing-api');
 
 const app = express();
 
@@ -80,6 +81,11 @@ app.get('/admin', (req, res) => {
 // RUTAS DE WEBHOOK (WhatsApp)
 // ========================================
 app.use('/webhook', webhookRoute);
+
+// ========================================
+// RUTAS DE LANDING API (para el frontend público)
+// ========================================
+app.use(landingApi);
 
 // ========================================
 // RUTAS DE ADMIN API
