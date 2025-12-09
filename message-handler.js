@@ -532,28 +532,28 @@ class MessageHandler {
         stateManager.setActivePedido(from, businessId, pedidoId);
         
         // Construir mensaje de éxito
-        let mensajeRespuesta = '✅ ¡LO APARTASTE!\n\n';
-        mensajeRespuesta += '🏪 ' + negocio.nombre + '\n\n';
-        mensajeRespuesta += '📦 ' + producto.nombre + '\n';
-        mensajeRespuesta += '💰 S/' + producto.precio.toFixed(2) + '\n';
-        mensajeRespuesta += '🆔 Pedido: ' + pedidoId + '\n\n';
-        mensajeRespuesta += '⏰ Tienes 30 minutos para completar tu compra.\n\n';
+        let mensajeRespuesta = '¡LO APARTASTE!\n\n';
+        mensajeRespuesta += negocio.nombre + '\n\n';
+        mensajeRespuesta += producto.nombre + '\n';
+        mensajeRespuesta += 'S/' + producto.precio.toFixed(2) + '\n';
+        mensajeRespuesta += 'Pedido: ' + pedidoId + '\n\n';
+        mensajeRespuesta += 'Tienes 30 minutos para completar tu compra.\n\n';
         
         if (cliente && cliente.nombre && cliente.direccion) {
             // Ya tenemos datos del cliente
             mensajeRespuesta += 'Tus datos de entrega:\n';
-            mensajeRespuesta += '👤 ' + cliente.nombre + '\n';
-            mensajeRespuesta += '📍 ' + cliente.direccion + '\n';
-            mensajeRespuesta += '📞 ' + (cliente.telefono || 'No registrado') + '\n\n';
+            mensajeRespuesta += cliente.nombre + '\n';
+            mensajeRespuesta += cliente.direccion + '\n';
+            mensajeRespuesta += (cliente.telefono || 'Sin teléfono') + '\n\n';
             
             // Mostrar datos de pago del negocio
             if (negocio.cuentasBancarias) {
-                mensajeRespuesta += '💳 CUENTAS PARA PAGAR:\n\n';
+                mensajeRespuesta += 'CUENTAS PARA PAGAR:\n\n';
                 const cuentas = negocio.cuentasBancarias.split('|');
                 cuentas.forEach(cuenta => {
                     const [banco, numero] = cuenta.split(':');
-                    mensajeRespuesta += '🏦 ' + banco + '\n';
-                    mensajeRespuesta += '   ' + numero + '\n\n';
+                    mensajeRespuesta += banco + '\n';
+                    mensajeRespuesta += numero + '\n\n';
                 });
             }
             
