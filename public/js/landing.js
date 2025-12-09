@@ -202,13 +202,30 @@ function renderProducts(productList) {
     }
 
     grid.innerHTML = productList.map((product, index) => {
-        const isAvailable = product.disponible > 0 && product.estado !== 'APARTADO';
         const images = product.imagen ? product.imagen.split('|').filter(i => i) : [];
         const imageCount = images.length;
         const mainImage = images[0] || '/icon-192.svg';
 
+        // Determinar estado del producto
+        const isComingSoon = product.estado === 'ACTIVO'; // Próximamente
+        const isOutOfStock = !isComingSoon && product.disponible <= 0;
+        const isAvailable = !isComingSoon && product.disponible > 0;
+
+        // Clases CSS
+        const cardClasses = [
+            'product-card',
+            isComingSoon ? 'coming-soon' : '',
+            isOutOfStock ? 'out-of-stock' : ''
+        ].filter(Boolean).join(' ');
+
+        // Solo permitir click si está disponible
+        const clickHandler = isAvailable ? `onclick="openProductModal(${index})"` : '';
+
         return `
-            <div class="product-card ${!isAvailable ? 'sold-out' : ''}" onclick="openProductModal(${index})">
+            <div class="${cardClasses}" ${clickHandler}>
+                ${isComingSoon ? '<div class="coming-soon-badge">Próximamente</div>' : ''}
+                ${isOutOfStock ? '<div class="out-of-stock-badge">Agotado</div>' : ''}
+                
                 <div class="product-image-container">
                     <img 
                         src="${mainImage}" 
@@ -216,10 +233,10 @@ function renderProducts(productList) {
                         id="product-img-${index}"
                         onerror="this.src='/icon-192.svg'"
                     >
-                    <span class="product-badge ${isAvailable ? 'badge-available' : 'badge-sold'}">
-                        ${isAvailable ? 'Disponible' : 'Agotado'}
-                    </span>
-                    ${imageCount > 1 ? `
+                    ${!isComingSoon && !isOutOfStock ? `
+                        <span class="product-badge badge-available">Disponible</span>
+                    ` : ''}
+                    ${imageCount > 1 && !isComingSoon ? `
                         <div class="image-dots" id="dots-${index}"></div>
                     ` : ''}
                 </div>
@@ -227,20 +244,26 @@ function renderProducts(productList) {
                     <h3 class="product-name">${product.nombre}</h3>
                     <div class="product-price">S/${parseFloat(product.precio).toFixed(2)}</div>
                     ${product.descripcion ? `<p class="product-desc">${product.descripcion}</p>` : ''}
+                    ${!isComingSoon ? `
+                        <div class="product-stock ${product.disponible <= 3 && product.disponible > 0 ? 'low' : ''}" style="font-size:0.75rem;color:var(--text-muted);margin-bottom:0.5rem;">
+                            ${product.disponible} disponible${product.disponible !== 1 ? 's' : ''}
+                        </div>
+                    ` : ''}
                     <button 
-                        class="apartalo-btn ${!isAvailable ? 'reserved' : ''}" 
-                        onclick="event.stopPropagation(); apartarProducto(${index})"
-                        ${!isAvailable ? 'disabled' : ''}
+                        class="apartalo-btn ${isComingSoon || isOutOfStock ? 'disabled' : ''}" 
+                        onclick="event.stopPropagation(); ${isAvailable ? `apartarProducto(${index})` : ''}"
+                        ${isComingSoon || isOutOfStock ? 'disabled' : ''}
                     >
-                        ${isAvailable ? 'APARTAR' : 'AGOTADO'}
+                        ${isComingSoon ? 'PRÓXIMAMENTE' : (isOutOfStock ? 'AGOTADO' : 'APARTAR')}
                     </button>
                 </div>
             </div>
         `;
     }).join('');
 
-    // Iniciar rotación para productos con múltiples imágenes
+    // Iniciar rotación para productos con múltiples imágenes (solo para disponibles)
     productList.forEach((product, index) => {
+        if (product.estado === 'ACTIVO') return; // No rotar en próximamente
         const images = product.imagen ? product.imagen.split('|').filter(i => i) : [];
         if (images.length > 1) {
             // Pequeño delay para asegurar que el DOM está listo
@@ -254,6 +277,9 @@ function openProductModal(index) {
     const product = products[index];
     if (!product) return;
 
+    // No abrir modal para productos próximamente
+    if (product.estado === 'ACTIVO') return;
+
     currentProduct = { ...product, index };
 
     const modal = document.getElementById('productModal');
@@ -262,7 +288,9 @@ function openProductModal(index) {
 
     const images = product.imagen ? product.imagen.split('|').filter(i => i) : [];
     const mainImage = images[0] || '/icon-192.svg';
-    const isAvailable = product.disponible > 0 && product.estado !== 'APARTADO';
+    const isComingSoon = product.estado === 'ACTIVO';
+    const isOutOfStock = product.disponible <= 0;
+    const isAvailable = !isComingSoon && product.disponible > 0;
 
     // Renderizar galería
     gallery.innerHTML = `
@@ -281,15 +309,15 @@ function openProductModal(index) {
         <h2 class="modal-product-name">${product.nombre}</h2>
         <div class="modal-product-price">S/${parseFloat(product.precio).toFixed(2)}</div>
         ${product.descripcion ? `<p class="modal-product-desc">${product.descripcion}</p>` : ''}
-        <div class="modal-stock">
-            ${isAvailable ? `${product.disponible} disponible${product.disponible > 1 ? 's' : ''}` : 'Sin stock'}
+        <div class="modal-stock ${product.disponible <= 3 && product.disponible > 0 ? 'low' : ''}">
+            ${isAvailable ? `${product.disponible} disponible${product.disponible > 1 ? 's' : ''}` : (isOutOfStock ? 'Sin stock' : 'Próximamente')}
         </div>
         <button 
-            class="modal-apartalo-btn" 
+            class="modal-apartalo-btn ${!isAvailable ? 'disabled' : ''}" 
             onclick="apartarProducto(${index})"
             ${!isAvailable ? 'disabled' : ''}
         >
-            ${isAvailable ? 'APARTAR AHORA' : 'AGOTADO'}
+            ${isAvailable ? 'APARTAR AHORA' : (isOutOfStock ? 'AGOTADO' : 'PRÓXIMAMENTE')}
         </button>
     `;
 

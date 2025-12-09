@@ -29,7 +29,7 @@ router.get('/api/businesses', async (req, res) => {
         }
 
         const negocios = sheetsService.getBusinesses();
-        
+
         const businesses = negocios.map(n => ({
             id: n.id,
             nombre: n.nombre,
@@ -38,12 +38,12 @@ router.get('/api/businesses', async (req, res) => {
             whatsapp: n.whatsappNumber || '',
             tiktok: n.tiktokUrl || ''
         }));
-        
+
         res.json({
             success: true,
             businesses: businesses
         });
-        
+
     } catch (error) {
         console.error('Error obteniendo negocios:', error);
         res.status(500).json({
@@ -60,7 +60,7 @@ router.get('/api/businesses', async (req, res) => {
 router.get('/api/products/:businessId', async (req, res) => {
     try {
         const { businessId } = req.params;
-        
+
         if (!sheetsService) {
             return res.json({
                 success: true,
@@ -71,7 +71,7 @@ router.get('/api/products/:businessId', async (req, res) => {
 
         // Obtener negocio
         const negocio = sheetsService.getBusiness(businessId);
-        
+
         if (!negocio) {
             return res.status(404).json({
                 success: false,
@@ -81,10 +81,18 @@ router.get('/api/products/:businessId', async (req, res) => {
 
         // Obtener inventario (true para incluir todos, luego filtramos)
         const inventario = await sheetsService.getInventory(businessId, true);
-        
-        // Filtrar productos PUBLICADOS (visibles en catálogo)
+
+        // Filtrar productos PUBLICADOS y ACTIVOS (visible en catálogo)
+        // INACTIVOS no se muestran
         const products = inventario
-            .filter(p => p.estado === 'PUBLICADO')
+            .filter(p => p.estado === 'PUBLICADO' || p.estado === 'ACTIVO')
+            .sort((a, b) => {
+                // Primero PUBLICADOS, luego ACTIVOS
+                if (a.estado === 'PUBLICADO' && b.estado !== 'PUBLICADO') return -1;
+                if (a.estado !== 'PUBLICADO' && b.estado === 'PUBLICADO') return 1;
+                // Dentro de cada grupo, ordenar por disponibilidad (más stock primero)
+                return (b.disponible || 0) - (a.disponible || 0);
+            })
             .map(p => ({
                 id: p.codigo,
                 codigo: p.codigo,
@@ -94,9 +102,9 @@ router.get('/api/products/:businessId', async (req, res) => {
                 imagen: p.imagenUrl || '',
                 disponible: p.disponible,
                 stock: p.stock,
-                estado: p.disponible > 0 ? 'disponible' : 'agotado'
+                estado: p.estado // Incluir estado real para el frontend
             }));
-        
+
         const business = {
             id: negocio.id,
             nombre: negocio.nombre,
@@ -105,13 +113,13 @@ router.get('/api/products/:businessId', async (req, res) => {
             tiktok: negocio.tiktokUrl || '',
             whatsapp: negocio.whatsappNumber || ''
         };
-        
+
         res.json({
             success: true,
             business: business,
             products: products
         });
-        
+
     } catch (error) {
         console.error('Error obteniendo productos:', error);
         res.status(500).json({

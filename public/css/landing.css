@@ -49,7 +49,9 @@ body {
 }
 
 @keyframes spin {
-    to { transform: rotate(360deg); }
+    to {
+        transform: rotate(360deg);
+    }
 }
 
 /* HOME VIEW */
@@ -658,7 +660,7 @@ body {
         grid-template-columns: repeat(3, 1fr);
         gap: 1.25rem;
     }
-    
+
     .business-grid {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -668,29 +670,29 @@ body {
     .hero {
         padding: 5rem 2rem;
     }
-    
+
     .hero h1 {
         font-size: 3rem;
     }
-    
+
     .catalog-info {
         display: flex;
         align-items: center;
         justify-content: space-between;
     }
-    
+
     .catalog-contact {
         margin-top: 0;
     }
-    
+
     .product-details {
         padding: 1.25rem;
     }
-    
+
     .product-name {
         font-size: 1rem;
     }
-    
+
     .product-price {
         font-size: 1.375rem;
     }
@@ -700,15 +702,15 @@ body {
     .container {
         padding: 3rem 2rem;
     }
-    
+
     .business-grid {
         grid-template-columns: repeat(3, 1fr);
     }
-    
+
     .business-card:hover {
         transform: translateY(-8px);
     }
-    
+
     .products-grid {
         gap: 1.5rem;
     }
@@ -866,29 +868,132 @@ body {
 
 /* Animaciones */
 @keyframes fadeIn {
-    from { opacity: 0; }
-    to { opacity: 1; }
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: 1;
+    }
 }
 
 @keyframes popIn {
-    from { 
-        opacity: 0; 
-        transform: scale(0.8) translateY(20px); 
+    from {
+        opacity: 0;
+        transform: scale(0.8) translateY(20px);
     }
-    to { 
-        opacity: 1; 
-        transform: scale(1) translateY(0); 
+
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
     }
 }
 
 @keyframes pulse {
-    0%, 100% { 
-        opacity: 1; 
-        transform: scale(1); 
+
+    0%,
+    100% {
+        opacity: 1;
+        transform: scale(1);
     }
-    50% { 
-        opacity: 0.8; 
-        transform: scale(1.05); 
+
+    50% {
+        opacity: 0.8;
+        transform: scale(1.05);
     }
 }
 
+/* ========================================
+   PRODUCTO PRÓXIMAMENTE (ACTIVO)
+   ======================================== */
+
+.product-card.coming-soon {
+    position: relative;
+    cursor: default;
+}
+
+.product-card.coming-soon .product-image {
+    filter: grayscale(100%);
+    opacity: 0.5;
+}
+
+.product-card.coming-soon .product-info {
+    opacity: 0.6;
+}
+
+.product-card.coming-soon:hover {
+    transform: none;
+    border-color: rgba(255, 255, 255, 0.05);
+}
+
+.coming-soon-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: linear-gradient(135deg, #6b7280 0%, #4b5563 100%);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    z-index: 10;
+    letter-spacing: 0.5px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* ========================================
+   PRODUCTO AGOTADO
+   ======================================== */
+
+.product-card.out-of-stock {
+    position: relative;
+    cursor: default;
+}
+
+.product-card.out-of-stock .product-image {
+    filter: grayscale(50%);
+    opacity: 0.6;
+}
+
+.product-card.out-of-stock:hover {
+    transform: none;
+    border-color: rgba(255, 255, 255, 0.05);
+}
+
+.out-of-stock-badge {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    color: white;
+    padding: 6px 14px;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+/* ========================================
+   BOTÓN DESHABILITADO
+   ======================================== */
+
+.btn-apartar.disabled {
+    background: #374151 !important;
+    color: #9ca3af !important;
+    cursor: not-allowed;
+    opacity: 0.7;
+}
+
+.btn-apartar.disabled:hover {
+    transform: none;
+    box-shadow: none;
+    background: #374151 !important;
+}
+
+/* Stock bajo */
+.product-stock.low {
+    color: #f59e0b;
+}
