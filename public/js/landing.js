@@ -3,6 +3,7 @@ let currentBusiness = null;
 let currentProduct = null;
 let businesses = {};
 let products = [];
+let imageRotationIntervals = {}; // Para manejar los intervalos de rotación
 
 // Inicializar app
 async function init() {
@@ -129,9 +130,55 @@ function renderCatalogInfo(business) {
     `;
 }
 
+// Limpiar todos los intervalos de rotación
+function clearAllImageRotations() {
+    Object.values(imageRotationIntervals).forEach(interval => clearInterval(interval));
+    imageRotationIntervals = {};
+}
+
+// Iniciar rotación de imágenes para una card
+function startImageRotation(cardId, images) {
+    if (images.length <= 1) return;
+    
+    let currentIndex = 0;
+    const imgElement = document.getElementById(`product-img-${cardId}`);
+    const dotsContainer = document.getElementById(`dots-${cardId}`);
+    
+    if (!imgElement) return;
+    
+    // Crear indicadores de puntos
+    if (dotsContainer) {
+        dotsContainer.innerHTML = images.map((_, i) => 
+            `<span class="dot ${i === 0 ? 'active' : ''}"></span>`
+        ).join('');
+    }
+    
+    imageRotationIntervals[cardId] = setInterval(() => {
+        currentIndex = (currentIndex + 1) % images.length;
+        
+        // Efecto de fade
+        imgElement.style.opacity = '0';
+        
+        setTimeout(() => {
+            imgElement.src = images[currentIndex];
+            imgElement.style.opacity = '1';
+            
+            // Actualizar dots
+            if (dotsContainer) {
+                dotsContainer.querySelectorAll('.dot').forEach((dot, i) => {
+                    dot.classList.toggle('active', i === currentIndex);
+                });
+            }
+        }, 200);
+    }, 2500); // Cambiar cada 2.5 segundos
+}
+
 // Renderizar productos en grid
 function renderProducts(productList) {
     const grid = document.getElementById('productsGrid');
+    
+    // Limpiar intervalos anteriores
+    clearAllImageRotations();
     
     if (productList.length === 0) {
         grid.innerHTML = `
@@ -154,11 +201,18 @@ function renderProducts(productList) {
         return `
             <div class="product-card ${!isAvailable ? 'sold-out' : ''}" onclick="openProductModal(${index})">
                 <div class="product-image-container">
-                    <img src="${mainImage}" class="product-image" onerror="this.src='/icon-192.svg'">
+                    <img 
+                        src="${mainImage}" 
+                        class="product-image" 
+                        id="product-img-${index}"
+                        onerror="this.src='/icon-192.svg'"
+                    >
                     <span class="product-badge ${isAvailable ? 'badge-available' : 'badge-sold'}">
                         ${isAvailable ? 'Disponible' : 'Agotado'}
                     </span>
-                    ${imageCount > 1 ? `<span class="image-count">+${imageCount - 1}</span>` : ''}
+                    ${imageCount > 1 ? `
+                        <div class="image-dots" id="dots-${index}"></div>
+                    ` : ''}
                 </div>
                 <div class="product-details">
                     <h3 class="product-name">${product.nombre}</h3>
@@ -175,6 +229,15 @@ function renderProducts(productList) {
             </div>
         `;
     }).join('');
+    
+    // Iniciar rotación para productos con múltiples imágenes
+    productList.forEach((product, index) => {
+        const images = product.imagen ? product.imagen.split('|').filter(i => i) : [];
+        if (images.length > 1) {
+            // Pequeño delay para asegurar que el DOM está listo
+            setTimeout(() => startImageRotation(index, images), 100 + (index * 50));
+        }
+    });
 }
 
 // Abrir modal de producto
@@ -318,6 +381,8 @@ async function apartarProducto(index) {
 
 // Volver al home
 function goBack() {
+    clearAllImageRotations(); // Limpiar intervalos al salir
+    
     const url = new URL(window.location);
     url.searchParams.delete('business');
     window.history.pushState({}, '', url);
@@ -363,6 +428,18 @@ document.addEventListener('keydown', (e) => {
 document.getElementById('productModal')?.addEventListener('click', (e) => {
     if (e.target.classList.contains('product-modal')) {
         closeProductModal();
+    }
+});
+
+// Limpiar intervalos cuando la página se oculta (ahorro de recursos)
+document.addEventListener('visibilitychange', () => {
+    if (document.hidden) {
+        clearAllImageRotations();
+    } else {
+        // Re-renderizar para reiniciar las rotaciones
+        if (products.length > 0) {
+            renderProducts(products);
+        }
     }
 });
 
