@@ -65,19 +65,19 @@ router.get('/:businessId/productos', async (req, res) => {
     try {
         const { businessId } = req.params;
         const { estado, disponible } = req.query;
-        
+
         let productos = await sheetsService.getInventory(businessId, true);
-        
+
         // Filtrar por estado si se especifica
         if (estado) {
             productos = productos.filter(p => p.estado.toUpperCase() === estado.toUpperCase());
         }
-        
+
         // Filtrar solo disponibles
         if (disponible === 'true') {
             productos = productos.filter(p => p.disponible > 0);
         }
-        
+
         res.json({
             success: true,
             businessId,
@@ -94,11 +94,11 @@ router.get('/:businessId/productos/:codigo', async (req, res) => {
     try {
         const { businessId, codigo } = req.params;
         const producto = await sheetsService.getProductByCode(businessId, codigo);
-        
+
         if (!producto) {
             return res.status(404).json({ success: false, error: 'Producto no encontrado' });
         }
-        
+
         res.json({ success: true, data: producto });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -110,36 +110,36 @@ router.post('/:businessId/upload-image', async (req, res) => {
     try {
         const { businessId } = req.params;
         const { base64, mimeType, filename } = req.body;
-        
+
         if (!base64) {
             return res.status(400).json({ success: false, error: 'Imagen requerida' });
         }
-        
+
         // Convertir base64 a buffer
         const imageBuffer = Buffer.from(base64, 'base64');
-        
+
         // Generar nombre único
         const timestamp = Date.now();
         const ext = (mimeType || 'image/jpeg').split('/')[1] || 'jpg';
         const uniqueFilename = `producto_${businessId}_${timestamp}.${ext}`;
-        
+
         // Subir a Google Drive
         const uploadResult = await sheetsService.uploadImageToDrive(
             imageBuffer,
             uniqueFilename,
             mimeType || 'image/jpeg'
         );
-        
+
         if (!uploadResult.success) {
             return res.status(500).json({ success: false, error: uploadResult.error || 'Error subiendo imagen' });
         }
-        
+
         res.json({
             success: true,
             url: uploadResult.directLink,
             fileId: uploadResult.fileId
         });
-        
+
     } catch (error) {
         console.error('Error subiendo imagen:', error);
         res.status(500).json({ success: false, error: error.message });
@@ -151,14 +151,14 @@ router.post('/:businessId/productos', async (req, res) => {
     try {
         const { businessId } = req.params;
         const { codigo, nombre, descripcion, precio, stock, imagenUrl } = req.body;
-        
+
         if (!nombre || precio === undefined || stock === undefined) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'Campos requeridos: nombre, precio, stock' 
+            return res.status(400).json({
+                success: false,
+                error: 'Campos requeridos: nombre, precio, stock'
             });
         }
-        
+
         const result = await sheetsService.createProduct(businessId, {
             codigo: codigo || null,
             nombre,
@@ -168,7 +168,7 @@ router.post('/:businessId/productos', async (req, res) => {
             imagenUrl: imagenUrl || '',
             estado: 'ACTIVO' // Por defecto ACTIVO pero no visible en catálogo hasta PUBLICADO
         });
-        
+
         res.status(201).json(result);
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -180,7 +180,7 @@ router.put('/:businessId/productos/:codigo', async (req, res) => {
     try {
         const { businessId, codigo } = req.params;
         const updates = req.body;
-        
+
         const result = await sheetsService.updateProduct(businessId, codigo, updates);
         res.json(result);
     } catch (error) {
@@ -192,11 +192,11 @@ router.put('/:businessId/productos/:codigo', async (req, res) => {
 router.post('/:businessId/productos/:codigo/publicar', async (req, res) => {
     try {
         const { businessId, codigo } = req.params;
-        
-        const result = await sheetsService.updateProduct(businessId, codigo, { 
-            estado: 'PUBLICADO' 
+
+        const result = await sheetsService.updateProduct(businessId, codigo, {
+            estado: 'PUBLICADO'
         });
-        
+
         res.json({
             success: true,
             message: `Producto ${codigo} publicado en catálogo`,
@@ -211,11 +211,11 @@ router.post('/:businessId/productos/:codigo/publicar', async (req, res) => {
 router.post('/:businessId/productos/:codigo/despublicar', async (req, res) => {
     try {
         const { businessId, codigo } = req.params;
-        
-        const result = await sheetsService.updateProduct(businessId, codigo, { 
-            estado: 'ACTIVO' 
+
+        const result = await sheetsService.updateProduct(businessId, codigo, {
+            estado: 'ACTIVO'
         });
-        
+
         res.json({
             success: true,
             message: `Producto ${codigo} removido del catálogo`,
@@ -231,12 +231,12 @@ router.put('/:businessId/productos/:codigo/stock', async (req, res) => {
     try {
         const { businessId, codigo } = req.params;
         const { stock, stockReservado } = req.body;
-        
+
         const result = await sheetsService.updateProductStock(businessId, codigo, {
             stock: stock !== undefined ? parseInt(stock) : undefined,
             stockReservado: stockReservado !== undefined ? parseInt(stockReservado) : undefined
         });
-        
+
         res.json(result);
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -259,11 +259,11 @@ router.post('/:businessId/productos/:codigo/liberar', async (req, res) => {
     try {
         const { businessId, codigo } = req.params;
         const { cantidad } = req.body;
-        
+
         if (!cantidad || cantidad < 1) {
             return res.status(400).json({ success: false, error: 'Cantidad debe ser mayor a 0' });
         }
-        
+
         const result = await sheetsService.releaseStock(businessId, codigo, parseInt(cantidad));
         res.json(result);
     } catch (error) {
@@ -281,7 +281,7 @@ router.get('/:businessId/live/stats', async (req, res) => {
         const { businessId } = req.params;
         const stats = liveManager.getStats(businessId);
         const webViewers = catalogSocket.getViewerCount(businessId);
-        
+
         res.json({
             success: true,
             businessId,
@@ -300,7 +300,7 @@ router.get('/:businessId/live/viewers', async (req, res) => {
     try {
         const { businessId } = req.params;
         const count = catalogSocket.getViewerCount(businessId);
-        
+
         res.json({
             success: true,
             businessId,
@@ -316,7 +316,7 @@ router.get('/:businessId/live/subscribers', async (req, res) => {
     try {
         const { businessId } = req.params;
         const subscribers = liveManager.getSubscribers(businessId);
-        
+
         res.json({
             success: true,
             businessId,
@@ -332,29 +332,36 @@ router.get('/:businessId/live/subscribers', async (req, res) => {
 router.post('/:businessId/live/broadcast/:codigo', async (req, res) => {
     try {
         const { businessId, codigo } = req.params;
-        
-        // Obtener producto
-        const producto = await sheetsService.getProductByCode(businessId, codigo);
+
+        // 1. Obtener producto
+        let producto = await sheetsService.getProductByCode(businessId, codigo);
         if (!producto) {
             return res.status(404).json({ success: false, error: 'Producto no encontrado' });
         }
-        
+
         if (producto.disponible < 1) {
             return res.status(400).json({ success: false, error: 'Producto sin stock disponible' });
         }
-        
-        // 1. Enviar a clientes WEB (modal en tiempo real)
+
+        // 2. AUTO-PUBLICAR: Si el producto no está PUBLICADO, cambiarlo
+        if (producto.estado !== 'PUBLICADO') {
+            await sheetsService.updateProduct(businessId, codigo, { estado: 'PUBLICADO' });
+            producto.estado = 'PUBLICADO';
+            console.log(`📢 Producto ${codigo} auto-publicado al enviar`);
+        }
+
+        // 3. Enviar a clientes WEB (siempre, aunque no haya viewers)
         const webResult = catalogSocket.broadcastProduct(businessId, producto);
-        
-        // 2. Enviar a suscritos de WhatsApp
-        const subscribers = liveManager.getSubscribers(businessId);
-        
-        // Publicar producto en el live manager
+
+        // 4. Publicar producto en el live manager
         liveManager.publishProduct(businessId, producto);
-        
+
+        // 5. Enviar a suscritos de WhatsApp (si hay)
+        const subscribers = liveManager.getSubscribers(businessId);
+
         let whatsappEnviados = 0;
         let whatsappErrores = 0;
-        
+
         for (const sub of subscribers) {
             try {
                 await whatsappService.sendProductLiveMessage(sub.whatsapp, {
@@ -367,16 +374,18 @@ router.post('/:businessId/live/broadcast/:codigo', async (req, res) => {
                 whatsappErrores++;
             }
         }
-        
+
+        // 6. SIEMPRE retornar success (no importa si hay 0 usuarios)
         res.json({
             success: true,
-            message: `Producto enviado`,
+            message: `Producto ${codigo} enviado y publicado`,
             data: {
                 producto: producto.codigo,
                 nombre: producto.nombre,
+                estadoActualizado: producto.estado,
                 web: {
-                    viewers: webResult.viewers,
-                    enviado: webResult.success
+                    viewers: webResult.viewers || 0,
+                    enviado: true
                 },
                 whatsapp: {
                     subscribers: subscribers.length,
@@ -385,8 +394,9 @@ router.post('/:businessId/live/broadcast/:codigo', async (req, res) => {
                 }
             }
         });
-        
+
     } catch (error) {
+        console.error('Error en broadcast:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -395,31 +405,40 @@ router.post('/:businessId/live/broadcast/:codigo', async (req, res) => {
 router.post('/:businessId/live/broadcast-web/:codigo', async (req, res) => {
     try {
         const { businessId, codigo } = req.params;
-        
+
         // Obtener producto
-        const producto = await sheetsService.getProductByCode(businessId, codigo);
+        let producto = await sheetsService.getProductByCode(businessId, codigo);
         if (!producto) {
             return res.status(404).json({ success: false, error: 'Producto no encontrado' });
         }
-        
+
         if (producto.disponible < 1) {
             return res.status(400).json({ success: false, error: 'Producto sin stock disponible' });
         }
-        
-        // Enviar solo a clientes WEB
+
+        // AUTO-PUBLICAR: Si el producto no está PUBLICADO, cambiarlo
+        if (producto.estado !== 'PUBLICADO') {
+            await sheetsService.updateProduct(businessId, codigo, { estado: 'PUBLICADO' });
+            producto.estado = 'PUBLICADO';
+            console.log(`📢 Producto ${codigo} auto-publicado al enviar a web`);
+        }
+
+        // Enviar a clientes WEB (siempre)
         const result = catalogSocket.broadcastProduct(businessId, producto);
-        
+
         res.json({
             success: true,
-            message: `Producto mostrado en catálogo web`,
+            message: `Producto ${codigo} mostrado en catálogo web`,
             data: {
                 producto: producto.codigo,
                 nombre: producto.nombre,
-                viewers: result.viewers
+                estadoActualizado: producto.estado,
+                viewers: result.viewers || 0
             }
         });
-        
+
     } catch (error) {
+        console.error('Error en broadcast-web:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
@@ -429,7 +448,7 @@ router.get('/:businessId/live/products', async (req, res) => {
     try {
         const { businessId } = req.params;
         const products = liveManager.getLiveProducts(businessId);
-        
+
         res.json({
             success: true,
             businessId,
@@ -446,7 +465,7 @@ router.delete('/:businessId/live/products/:codigo', async (req, res) => {
     try {
         const { businessId, codigo } = req.params;
         const cleared = liveManager.clearLiveProduct(businessId, codigo);
-        
+
         res.json({
             success: cleared,
             message: cleared ? 'Producto removido del LIVE' : 'Producto no encontrado en LIVE'
@@ -461,18 +480,18 @@ router.post('/:businessId/live/notify', async (req, res) => {
     try {
         const { businessId } = req.params;
         const { mensaje } = req.body;
-        
+
         if (!mensaje) {
             return res.status(400).json({ success: false, error: 'Mensaje requerido' });
         }
-        
+
         const subscribers = liveManager.getSubscribers(businessId);
         const negocio = sheetsService.getBusiness(businessId);
-        
+
         let enviados = 0;
         for (const sub of subscribers) {
             try {
-                await whatsappService.sendMessage(sub.whatsapp, 
+                await whatsappService.sendMessage(sub.whatsapp,
                     `*${negocio.nombre}*\n\n${mensaje}`
                 );
                 enviados++;
@@ -480,7 +499,7 @@ router.post('/:businessId/live/notify', async (req, res) => {
                 console.error(`Error enviando a ${sub.whatsapp}:`, err.message);
             }
         }
-        
+
         res.json({
             success: true,
             message: `Notificacion enviada a ${enviados} usuarios`,
@@ -500,24 +519,24 @@ router.get('/:businessId/pedidos', async (req, res) => {
     try {
         const { businessId } = req.params;
         const { estado, fecha, limit } = req.query;
-        
+
         let pedidos = await sheetsService.getAllOrders(businessId);
-        
+
         // Filtrar por estado
         if (estado) {
             pedidos = pedidos.filter(p => p.estado.toUpperCase() === estado.toUpperCase());
         }
-        
+
         // Filtrar por fecha
         if (fecha) {
             pedidos = pedidos.filter(p => p.fecha === fecha);
         }
-        
+
         // Limitar resultados
         if (limit) {
             pedidos = pedidos.slice(0, parseInt(limit));
         }
-        
+
         res.json({
             success: true,
             businessId,
@@ -534,16 +553,16 @@ router.get('/:businessId/pedidos/stats', async (req, res) => {
     try {
         const { businessId } = req.params;
         const pedidos = await sheetsService.getAllOrders(businessId);
-        
+
         const stats = {
             total: pedidos.length,
             porEstado: {},
             montoTotal: 0,
             hoy: 0
         };
-        
+
         const hoy = new Date().toLocaleDateString('es-PE');
-        
+
         pedidos.forEach(p => {
             // Contar por estado
             stats.porEstado[p.estado] = (stats.porEstado[p.estado] || 0) + 1;
@@ -552,7 +571,7 @@ router.get('/:businessId/pedidos/stats', async (req, res) => {
             // Contar de hoy
             if (p.fecha === hoy) stats.hoy++;
         });
-        
+
         res.json({ success: true, data: stats });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -564,11 +583,11 @@ router.get('/:businessId/pedidos/:id', async (req, res) => {
     try {
         const { businessId, id } = req.params;
         const pedido = await sheetsService.getOrderById(businessId, id);
-        
+
         if (!pedido) {
             return res.status(404).json({ success: false, error: 'Pedido no encontrado' });
         }
-        
+
         res.json({ success: true, data: pedido });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
@@ -580,7 +599,7 @@ router.put('/:businessId/pedidos/:id/estado', async (req, res) => {
     try {
         const { businessId, id } = req.params;
         const { estado, observaciones } = req.body;
-        
+
         const estadosValidos = [
             'PENDIENTE_PAGO',
             'PENDIENTE_VALIDACION',
@@ -590,20 +609,20 @@ router.put('/:businessId/pedidos/:id/estado', async (req, res) => {
             'ENTREGADO',
             'CANCELADO'
         ];
-        
+
         if (!estado || !estadosValidos.includes(estado.toUpperCase())) {
-            return res.status(400).json({ 
-                success: false, 
-                error: `Estado invalido. Valores permitidos: ${estadosValidos.join(', ')}` 
+            return res.status(400).json({
+                success: false,
+                error: `Estado invalido. Valores permitidos: ${estadosValidos.join(', ')}`
             });
         }
-        
+
         const result = await sheetsService.updateOrderStatus(businessId, id, estado.toUpperCase());
-        
+
         if (observaciones) {
             await sheetsService.updateOrderObservations(businessId, id, observaciones);
         }
-        
+
         res.json({
             success: true,
             message: `Pedido ${id} actualizado a ${estado}`,
@@ -619,13 +638,13 @@ router.post('/:businessId/pedidos/:id/cancelar', async (req, res) => {
     try {
         const { businessId, id } = req.params;
         const { motivo } = req.body;
-        
+
         // Obtener pedido
         const pedido = await sheetsService.getOrderById(businessId, id);
         if (!pedido) {
             return res.status(404).json({ success: false, error: 'Pedido no encontrado' });
         }
-        
+
         // Liberar stock de cada producto
         if (pedido.productos) {
             const items = pedido.productos.split('|');
@@ -636,14 +655,14 @@ router.post('/:businessId/pedidos/:id/cancelar', async (req, res) => {
                 }
             }
         }
-        
+
         // Actualizar estado
         await sheetsService.updateOrderStatus(businessId, id, 'CANCELADO');
-        
+
         if (motivo) {
             await sheetsService.updateOrderObservations(businessId, id, `CANCELADO: ${motivo}`);
         }
-        
+
         res.json({
             success: true,
             message: `Pedido ${id} cancelado y stock liberado`
@@ -662,7 +681,7 @@ router.get('/:businessId/clientes', async (req, res) => {
     try {
         const { businessId } = req.params;
         const clientes = await sheetsService.getAllClients(businessId);
-        
+
         res.json({
             success: true,
             businessId,
@@ -679,16 +698,16 @@ router.get('/:businessId/clientes/:whatsapp', async (req, res) => {
     try {
         const { businessId, whatsapp } = req.params;
         const cliente = await sheetsService.findClient(businessId, whatsapp);
-        
+
         if (!cliente) {
             return res.status(404).json({ success: false, error: 'Cliente no encontrado' });
         }
-        
+
         // Obtener historial de pedidos
         const pedidos = await sheetsService.getOrdersByClient(businessId, whatsapp);
-        
-        res.json({ 
-            success: true, 
+
+        res.json({
+            success: true,
             data: {
                 ...cliente,
                 pedidos: pedidos

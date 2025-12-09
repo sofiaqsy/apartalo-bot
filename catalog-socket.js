@@ -13,41 +13,41 @@ const businessRooms = {};
  */
 function initialize(httpServer) {
     const { Server } = require('socket.io');
-    
+
     io = new Server(httpServer, {
         cors: {
             origin: "*",
             methods: ["GET", "POST"]
         }
     });
-    
+
     io.on('connection', (socket) => {
         console.log('📱 Cliente web conectado:', socket.id);
-        
+
         // Cliente se une a un negocio específico
         socket.on('join-catalog', (businessId) => {
             socket.join(`catalog-${businessId}`);
-            
+
             if (!businessRooms[businessId]) {
                 businessRooms[businessId] = new Set();
             }
             businessRooms[businessId].add(socket.id);
-            
+
             console.log(`👁️ Cliente ${socket.id} viendo catálogo de ${businessId}`);
             console.log(`   Viewers en ${businessId}: ${businessRooms[businessId].size}`);
-            
+
             // Notificar cantidad de viewers al admin
             io.to(`admin-${businessId}`).emit('viewers-update', {
                 businessId,
                 count: businessRooms[businessId].size
             });
         });
-        
+
         // Admin se une a su panel
         socket.on('join-admin', (businessId) => {
             socket.join(`admin-${businessId}`);
             console.log(`🔧 Admin conectado para ${businessId}`);
-            
+
             // Enviar cantidad actual de viewers
             const viewerCount = businessRooms[businessId]?.size || 0;
             socket.emit('viewers-update', {
@@ -55,14 +55,14 @@ function initialize(httpServer) {
                 count: viewerCount
             });
         });
-        
+
         // Cliente sale del catálogo
         socket.on('leave-catalog', (businessId) => {
             socket.leave(`catalog-${businessId}`);
-            
+
             if (businessRooms[businessId]) {
                 businessRooms[businessId].delete(socket.id);
-                
+
                 // Notificar al admin
                 io.to(`admin-${businessId}`).emit('viewers-update', {
                     businessId,
@@ -70,16 +70,16 @@ function initialize(httpServer) {
                 });
             }
         });
-        
+
         // Desconexión
         socket.on('disconnect', () => {
             console.log('📴 Cliente desconectado:', socket.id);
-            
+
             // Limpiar de todos los rooms
             Object.keys(businessRooms).forEach(businessId => {
                 if (businessRooms[businessId].has(socket.id)) {
                     businessRooms[businessId].delete(socket.id);
-                    
+
                     // Notificar al admin
                     io.to(`admin-${businessId}`).emit('viewers-update', {
                         businessId,
@@ -89,7 +89,7 @@ function initialize(httpServer) {
             });
         });
     });
-    
+
     console.log('🔌 Socket.IO inicializado para catálogo web');
     return io;
 }
@@ -103,12 +103,13 @@ function broadcastProduct(businessId, producto) {
         console.log('⚠️ Socket.IO no inicializado');
         return { success: false, viewers: 0 };
     }
-    
+
     const viewerCount = businessRooms[businessId]?.size || 0;
-    
+
     console.log(`📢 Publicando producto ${producto.codigo} a ${viewerCount} viewers`);
-    
+
     // Emitir a todos los clientes viendo el catálogo de este negocio
+    // (Socket.IO no falla si no hay listeners)
     io.to(`catalog-${businessId}`).emit('product-live', {
         businessId,
         producto: {
@@ -119,11 +120,13 @@ function broadcastProduct(businessId, producto) {
             precio: producto.precio,
             imagen: producto.imagenUrl || producto.imagen || '',
             disponible: producto.disponible,
-            stock: producto.stock
+            stock: producto.stock,
+            estado: producto.estado || 'PUBLICADO'
         },
         timestamp: Date.now()
     });
-    
+
+    // Siempre retornar success: true
     return { success: true, viewers: viewerCount };
 }
 
@@ -132,7 +135,7 @@ function broadcastProduct(businessId, producto) {
  */
 function notifyProductReserved(businessId, productCode, remainingStock) {
     if (!io) return;
-    
+
     io.to(`catalog-${businessId}`).emit('product-reserved', {
         businessId,
         productCode,

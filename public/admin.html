@@ -1468,28 +1468,35 @@
         }
 
         async function broadcastProduct(codigo) {
-            const subscriberCount = liveStats.subscriberCount || 0;
-            if (subscriberCount === 0) {
-                showToast('No hay usuarios conectados al LIVE', 'error');
-                return;
-            }
-
-            if (!confirm(`¿Enviar ${codigo} a ${subscriberCount} usuario(s)?`)) return;
+            // Confirmar antes de enviar
+            if (!confirm(`¿Enviar y publicar "${codigo}"?`)) return;
 
             const btn = document.querySelector(`#live-product-${codigo} .btn-broadcast`);
-            btn.disabled = true;
-            btn.innerHTML = '⏳ Enviando...';
+            if (btn) {
+                btn.disabled = true;
+                btn.innerHTML = '⏳ Enviando...';
+            }
 
             const result = await api(`/${currentBusiness}/live/broadcast/${codigo}`, { method: 'POST' });
 
             if (result.success) {
                 sentProducts.add(codigo);
-                showToast(`✅ Enviado a ${result.data.enviados} usuarios`, 'success');
+
+                // Mostrar mensaje de éxito con detalles
+                const webViewers = result.data.web?.viewers || 0;
+                const whatsappSent = result.data.whatsapp?.enviados || 0;
+
+                showToast(`✅ ${result.data.nombre} publicado y enviado (${webViewers} web, ${whatsappSent} WhatsApp)`, 'success');
+
+                // Recargar productos para ver el nuevo estado PUBLICADO
+                await loadProducts();
                 renderLiveProducts();
                 await refreshLiveStats();
             } else {
-                btn.disabled = false;
-                btn.innerHTML = '📢 Enviar';
+                if (btn) {
+                    btn.disabled = false;
+                    btn.innerHTML = '📢 Enviar';
+                }
                 showToast(result.error || 'Error al enviar', 'error');
             }
         }
