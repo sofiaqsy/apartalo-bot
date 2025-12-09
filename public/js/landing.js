@@ -156,7 +156,7 @@ function startImageRotation(cardId, images) {
     imageRotationIntervals[cardId] = setInterval(() => {
         currentIndex = (currentIndex + 1) % images.length;
         
-        // Efecto de fade
+        // Efecto de fade lento y suave
         imgElement.style.opacity = '0';
         
         setTimeout(() => {
@@ -169,8 +169,8 @@ function startImageRotation(cardId, images) {
                     dot.classList.toggle('active', i === currentIndex);
                 });
             }
-        }, 200);
-    }, 2500); // Cambiar cada 2.5 segundos
+        }, 800);
+    }, 4500); // Cambiar cada 4.5 segundos
 }
 
 // Renderizar productos en grid
