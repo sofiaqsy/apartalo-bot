@@ -3,8 +3,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>ApartaLo - Catálogo de Productos</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <title>ApartaLo</title>
+    <link rel="icon" type="image/svg+xml" href="/icon-192.svg">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/landing.css">
 </head>
 <body>
@@ -12,14 +13,14 @@
     <div id="homeView" class="view active">
         <section class="hero">
             <h1>ApartaLo</h1>
-            <p>Catálogo de productos. Aparta y te contactamos.</p>
+            <p>Encuentra y aparta tus productos favoritos</p>
         </section>
 
         <div class="container">
             <h2 class="section-title">Negocios</h2>
             <div class="loading" id="homeLoading">
                 <div class="spinner"></div>
-                <p style="margin-top: 1rem;">Cargando negocios...</p>
+                <p style="margin-top: 1rem; color: var(--text-muted);">Cargando...</p>
             </div>
             <div class="business-grid" id="businessGrid"></div>
         </div>
@@ -31,19 +32,16 @@
             <div class="header-content">
                 <button class="back-button" onclick="goBack()">← Volver</button>
                 <span class="header-title">ApartaLo</span>
-                <button class="share-button" onclick="shareLink()">📤 Compartir</button>
+                <button class="share-button" onclick="shareLink()">Compartir</button>
             </div>
         </div>
 
         <div class="catalog-container">
-            <div class="catalog-info" id="catalogInfo">
-                <!-- Info del negocio se carga dinámicamente -->
-            </div>
-            
+            <div class="catalog-info" id="catalogInfo"></div>
             <div class="products-grid" id="productsGrid">
                 <div class="loading">
                     <div class="spinner"></div>
-                    <p style="margin-top: 1rem;">Cargando productos...</p>
+                    <p style="margin-top: 1rem; color: var(--text-muted);">Cargando productos...</p>
                 </div>
             </div>
         </div>
@@ -53,12 +51,8 @@
     <div class="product-modal" id="productModal">
         <div class="modal-content">
             <button class="modal-close" onclick="closeProductModal()">×</button>
-            <div class="modal-gallery" id="modalGallery">
-                <!-- Galería de imágenes -->
-            </div>
-            <div class="modal-info" id="modalInfo">
-                <!-- Info del producto -->
-            </div>
+            <div class="modal-gallery" id="modalGallery"></div>
+            <div class="modal-info" id="modalInfo"></div>
         </div>
     </div>
 
@@ -66,7 +60,7 @@
     <div class="success-overlay" id="successOverlay">
         <div class="success-content">
             <div class="success-icon">✓</div>
-            <div class="success-text">¡APARTADO!</div>
+            <div class="success-text">Apartado</div>
             <div class="success-subtext">Redirigiendo a WhatsApp...</div>
             <div class="countdown-timer" id="countdownTimer">3</div>
         </div>

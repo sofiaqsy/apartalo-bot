@@ -44,9 +44,9 @@ function renderBusinesses(businessList) {
     if (businessList.length === 0) {
         grid.innerHTML = `
             <div class="empty-state">
-                <div class="empty-icon">📦</div>
+                <div class="empty-icon">○</div>
                 <p class="empty-text">No hay negocios disponibles</p>
-                <p class="empty-subtext">Pronto tendremos más opciones para ti</p>
+                <p class="empty-subtext">Pronto tendremos más opciones</p>
             </div>
         `;
         return;
@@ -59,7 +59,7 @@ function renderBusinesses(businessList) {
                 <h3 class="business-name">${business.nombre}</h3>
                 <p class="business-desc">${business.descripcion || 'Catálogo de productos'}</p>
                 <div class="business-stats">
-                    <span class="product-count">📦 Ver catálogo</span>
+                    <span class="product-count">Ver catálogo →</span>
                 </div>
             </div>
         </div>
@@ -123,8 +123,8 @@ function renderCatalogInfo(business) {
             </div>
         </div>
         <div class="catalog-contact">
-            ${business.whatsapp ? `<a href="https://wa.me/${business.whatsapp}" target="_blank" class="contact-btn">💬 WhatsApp</a>` : ''}
-            ${business.tiktok ? `<a href="${business.tiktok}" target="_blank" class="contact-btn">🎵 TikTok</a>` : ''}
+            ${business.whatsapp ? `<a href="https://wa.me/${business.whatsapp}" target="_blank" class="contact-btn">WhatsApp</a>` : ''}
+            ${business.tiktok ? `<a href="${business.tiktok}" target="_blank" class="contact-btn">TikTok</a>` : ''}
         </div>
     `;
 }
@@ -136,10 +136,10 @@ function renderProducts(productList) {
     if (productList.length === 0) {
         grid.innerHTML = `
             <div class="empty-state" style="grid-column: 1 / -1;">
-                <div class="empty-icon">📦</div>
+                <div class="empty-icon">○</div>
                 <p class="empty-text">No hay productos disponibles</p>
                 <p class="empty-subtext">Vuelve pronto para ver nuevos productos</p>
-                <button onclick="goBack()" style="margin-top: 1rem; padding: 0.75rem 1.5rem; background: var(--primary); border: none; border-radius: 8px; color: #000; font-weight: 600; cursor: pointer;">Volver</button>
+                <button onclick="goBack()" style="margin-top: 1.5rem; padding: 0.75rem 2rem; background: var(--primary); border: none; border-radius: 10px; color: #000; font-weight: 600; cursor: pointer;">Volver</button>
             </div>
         `;
         return;
@@ -158,7 +158,7 @@ function renderProducts(productList) {
                     <span class="product-badge ${isAvailable ? 'badge-available' : 'badge-sold'}">
                         ${isAvailable ? 'Disponible' : 'Agotado'}
                     </span>
-                    ${imageCount > 1 ? `<span class="image-count">📷 ${imageCount}</span>` : ''}
+                    ${imageCount > 1 ? `<span class="image-count">+${imageCount - 1}</span>` : ''}
                 </div>
                 <div class="product-details">
                     <h3 class="product-name">${product.nombre}</h3>
@@ -169,7 +169,7 @@ function renderProducts(productList) {
                         onclick="event.stopPropagation(); apartarProducto(${index})"
                         ${!isAvailable ? 'disabled' : ''}
                     >
-                        ${isAvailable ? '🛒 Apartar' : '✓ Apartado'}
+                        ${isAvailable ? 'APARTAR' : 'AGOTADO'}
                     </button>
                 </div>
             </div>
@@ -210,14 +210,14 @@ function openProductModal(index) {
         <div class="modal-product-price">S/${parseFloat(product.precio).toFixed(2)}</div>
         ${product.descripcion ? `<p class="modal-product-desc">${product.descripcion}</p>` : ''}
         <div class="modal-stock">
-            ${isAvailable ? `✓ ${product.disponible} disponible(s)` : '✗ Agotado'}
+            ${isAvailable ? `${product.disponible} disponible${product.disponible > 1 ? 's' : ''}` : 'Sin stock'}
         </div>
         <button 
             class="modal-apartalo-btn" 
             onclick="apartarProducto(${index})"
             ${!isAvailable ? 'disabled' : ''}
         >
-            ${isAvailable ? '🛒 APARTAR AHORA' : '✓ PRODUCTO APARTADO'}
+            ${isAvailable ? 'APARTAR AHORA' : 'AGOTADO'}
         </button>
     `;
     
@@ -247,7 +247,7 @@ async function apartarProducto(index) {
     const btns = document.querySelectorAll(`[onclick*="apartarProducto(${index})"]`);
     btns.forEach(btn => {
         btn.disabled = true;
-        btn.textContent = '⏳ Procesando...';
+        btn.textContent = 'Procesando...';
     });
     
     try {
@@ -268,7 +268,7 @@ async function apartarProducto(index) {
             // Actualizar botones
             btns.forEach(btn => {
                 btn.classList.add('reserved');
-                btn.textContent = '✓ APARTADO';
+                btn.textContent = 'APARTADO';
             });
             
             // Cerrar modal si está abierto
@@ -302,7 +302,7 @@ async function apartarProducto(index) {
         } else {
             btns.forEach(btn => {
                 btn.disabled = false;
-                btn.textContent = '🛒 Apartar';
+                btn.textContent = 'APARTAR';
             });
             showError(data.error || 'Error al apartar producto');
         }
@@ -310,7 +310,7 @@ async function apartarProducto(index) {
         console.error('Error:', error);
         btns.forEach(btn => {
             btn.disabled = false;
-            btn.textContent = '🛒 Apartar';
+            btn.textContent = 'APARTAR';
         });
         showError('Error de conexión');
     }
@@ -334,13 +334,13 @@ function shareLink() {
     
     if (navigator.share) {
         navigator.share({
-            title: 'ApartaLo - Catálogo de Productos',
-            text: '¡Mira estos productos!',
+            title: 'ApartaLo',
+            text: 'Mira estos productos',
             url: url
         }).catch(err => console.log('Error sharing:', err));
     } else {
         navigator.clipboard.writeText(url).then(() => {
-            alert('¡Link copiado al portapapeles!');
+            alert('Link copiado');
         }).catch(err => {
             console.error('Error copying:', err);
         });
