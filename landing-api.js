@@ -82,9 +82,9 @@ router.get('/api/products/:businessId', async (req, res) => {
         // Obtener inventario (true para incluir todos, luego filtramos)
         const inventario = await sheetsService.getInventory(businessId, true);
         
-        // Filtrar productos activos
+        // Filtrar productos PUBLICADOS (visibles en catálogo)
         const products = inventario
-            .filter(p => p.estado === 'ACTIVO')
+            .filter(p => p.estado === 'PUBLICADO')
             .map(p => ({
                 id: p.codigo,
                 codigo: p.codigo,

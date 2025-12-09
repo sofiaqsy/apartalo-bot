@@ -56,6 +56,27 @@
         </div>
     </div>
 
+    <!-- LIVE MODAL - Producto en tiempo real -->
+    <div class="live-modal" id="liveModal">
+        <div class="live-modal-overlay" onclick="closeLiveModal()"></div>
+        <div class="live-modal-content">
+            <button class="live-modal-close" onclick="closeLiveModal()">×</button>
+            <span class="live-badge">🔴 EN VIVO</span>
+            <img id="liveProductImage" class="live-product-image" src="" alt="" onerror="this.src='/icon-192.svg'">
+            <div class="live-product-info">
+                <h2 id="liveProductName"></h2>
+                <div id="liveProductPrice" class="live-product-price"></div>
+                <p id="liveProductDesc" class="live-product-desc"></p>
+                <div id="liveProductStock" class="live-product-stock"></div>
+                <button class="live-apartalo-btn" onclick="apartarProductoLive()">
+                    🛒 APARTAR AHORA
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Socket.IO -->
+    <script src="/socket.io/socket.io.js"></script>
     <script src="/js/landing.js"></script>
 </body>
 </html>

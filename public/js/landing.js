@@ -5,11 +5,18 @@ let businesses = {};
 let products = [];
 let imageRotationIntervals = {}; // Para manejar los intervalos de rotación
 
+// Socket.IO
+let socket = null;
+let currentLiveProduct = null;
+
 // Inicializar app
 async function init() {
+    // Inicializar Socket.IO
+    initSocket();
+
     const urlParams = new URLSearchParams(window.location.search);
     const businessId = urlParams.get('business');
-    
+
     if (businessId) {
         await openBusinessDirect(businessId);
     } else {
@@ -22,7 +29,7 @@ async function loadBusinesses() {
     try {
         const response = await fetch('/api/businesses');
         const data = await response.json();
-        
+
         if (data.success) {
             businesses = data.businesses;
             renderBusinesses(data.businesses);
@@ -39,9 +46,9 @@ async function loadBusinesses() {
 function renderBusinesses(businessList) {
     const grid = document.getElementById('businessGrid');
     const loading = document.getElementById('homeLoading');
-    
+
     loading.style.display = 'none';
-    
+
     if (businessList.length === 0) {
         grid.innerHTML = `
             <div class="empty-state">
@@ -52,7 +59,7 @@ function renderBusinesses(businessList) {
         `;
         return;
     }
-    
+
     grid.innerHTML = businessList.map(business => `
         <div class="business-card" onclick="openBusiness('${business.id}')">
             <img src="${business.imagen || '/icon-192.svg'}" class="business-image" onerror="this.src='/icon-192.svg'">
@@ -70,21 +77,23 @@ function renderBusinesses(businessList) {
 // Abrir negocio desde home
 async function openBusiness(businessId) {
     currentBusiness = businessId;
-    
+    joinBusinessRoom(businessId); // Unirse al room de Socket.IO
+
     const url = new URL(window.location);
     url.searchParams.set('business', businessId);
     window.history.pushState({}, '', url);
-    
+
     await loadProducts(businessId);
 }
 
 // Abrir negocio directo desde URL
 async function openBusinessDirect(businessId) {
     currentBusiness = businessId;
-    
+    joinBusinessRoom(businessId); // Unirse al room de Socket.IO
+
     document.getElementById('homeView').classList.remove('active');
     document.getElementById('productsView').classList.add('active');
-    
+
     await loadProducts(businessId);
 }
 
@@ -93,12 +102,12 @@ async function loadProducts(businessId) {
     try {
         const response = await fetch(`/api/products/${businessId}`);
         const data = await response.json();
-        
+
         if (data.success) {
             products = data.products;
             renderCatalogInfo(data.business);
             renderProducts(data.products);
-            
+
             document.getElementById('homeView').classList.remove('active');
             document.getElementById('productsView').classList.add('active');
             window.scrollTo(0, 0);
@@ -114,7 +123,7 @@ async function loadProducts(businessId) {
 // Renderizar info del catálogo
 function renderCatalogInfo(business) {
     const container = document.getElementById('catalogInfo');
-    
+
     container.innerHTML = `
         <div class="catalog-header">
             <img src="${business.imagen || '/icon-192.svg'}" class="catalog-logo" onerror="this.src='/icon-192.svg'">
@@ -139,30 +148,30 @@ function clearAllImageRotations() {
 // Iniciar rotación de imágenes para una card
 function startImageRotation(cardId, images) {
     if (images.length <= 1) return;
-    
+
     let currentIndex = 0;
     const imgElement = document.getElementById(`product-img-${cardId}`);
     const dotsContainer = document.getElementById(`dots-${cardId}`);
-    
+
     if (!imgElement) return;
-    
+
     // Crear indicadores de puntos
     if (dotsContainer) {
-        dotsContainer.innerHTML = images.map((_, i) => 
+        dotsContainer.innerHTML = images.map((_, i) =>
             `<span class="dot ${i === 0 ? 'active' : ''}"></span>`
         ).join('');
     }
-    
+
     imageRotationIntervals[cardId] = setInterval(() => {
         currentIndex = (currentIndex + 1) % images.length;
-        
+
         // Efecto de fade lento y suave
         imgElement.style.opacity = '0';
-        
+
         setTimeout(() => {
             imgElement.src = images[currentIndex];
             imgElement.style.opacity = '1';
-            
+
             // Actualizar dots
             if (dotsContainer) {
                 dotsContainer.querySelectorAll('.dot').forEach((dot, i) => {
@@ -176,10 +185,10 @@ function startImageRotation(cardId, images) {
 // Renderizar productos en grid
 function renderProducts(productList) {
     const grid = document.getElementById('productsGrid');
-    
+
     // Limpiar intervalos anteriores
     clearAllImageRotations();
-    
+
     if (productList.length === 0) {
         grid.innerHTML = `
             <div class="empty-state" style="grid-column: 1 / -1;">
@@ -191,13 +200,13 @@ function renderProducts(productList) {
         `;
         return;
     }
-    
+
     grid.innerHTML = productList.map((product, index) => {
         const isAvailable = product.disponible > 0 && product.estado !== 'APARTADO';
         const images = product.imagen ? product.imagen.split('|').filter(i => i) : [];
         const imageCount = images.length;
         const mainImage = images[0] || '/icon-192.svg';
-        
+
         return `
             <div class="product-card ${!isAvailable ? 'sold-out' : ''}" onclick="openProductModal(${index})">
                 <div class="product-image-container">
@@ -229,7 +238,7 @@ function renderProducts(productList) {
             </div>
         `;
     }).join('');
-    
+
     // Iniciar rotación para productos con múltiples imágenes
     productList.forEach((product, index) => {
         const images = product.imagen ? product.imagen.split('|').filter(i => i) : [];
@@ -244,17 +253,17 @@ function renderProducts(productList) {
 function openProductModal(index) {
     const product = products[index];
     if (!product) return;
-    
+
     currentProduct = { ...product, index };
-    
+
     const modal = document.getElementById('productModal');
     const gallery = document.getElementById('modalGallery');
     const info = document.getElementById('modalInfo');
-    
+
     const images = product.imagen ? product.imagen.split('|').filter(i => i) : [];
     const mainImage = images[0] || '/icon-192.svg';
     const isAvailable = product.disponible > 0 && product.estado !== 'APARTADO';
-    
+
     // Renderizar galería
     gallery.innerHTML = `
         <img src="${mainImage}" class="gallery-main-image" id="galleryMainImage" onerror="this.src='/icon-192.svg'">
@@ -266,7 +275,7 @@ function openProductModal(index) {
             </div>
         ` : ''}
     `;
-    
+
     // Renderizar info
     info.innerHTML = `
         <h2 class="modal-product-name">${product.nombre}</h2>
@@ -283,7 +292,7 @@ function openProductModal(index) {
             ${isAvailable ? 'APARTAR AHORA' : 'AGOTADO'}
         </button>
     `;
-    
+
     modal.classList.add('active');
     document.body.style.overflow = 'hidden';
 }
@@ -308,10 +317,10 @@ const APARTALO_WHATSAPP = '19895335574';
 // Apartar producto - Redirige directo a WhatsApp
 function apartarProducto(index) {
     const product = products[index];
-    
+
     // Cerrar modal si está abierto
     closeProductModal();
-    
+
     // Construir mensaje para WhatsApp
     const mensaje = `APARTADO_WEB
 Negocio: ${currentBusiness}
@@ -321,10 +330,10 @@ Nombre: ${product.nombre}
 Precio: S/${parseFloat(product.precio).toFixed(2)}
 
 Quiero apartar este producto`;
-    
+
     // Generar URL de WhatsApp
     const whatsappUrl = `https://wa.me/${APARTALO_WHATSAPP}?text=${encodeURIComponent(mensaje)}`;
-    
+
     // Redirigir inmediatamente
     window.location.href = whatsappUrl;
 }
@@ -332,11 +341,11 @@ Quiero apartar este producto`;
 // Volver al home
 function goBack() {
     clearAllImageRotations(); // Limpiar intervalos al salir
-    
+
     const url = new URL(window.location);
     url.searchParams.delete('business');
     window.history.pushState({}, '', url);
-    
+
     document.getElementById('productsView').classList.remove('active');
     document.getElementById('homeView').classList.add('active');
     closeProductModal();
@@ -346,7 +355,7 @@ function goBack() {
 // Compartir link
 function shareLink() {
     const url = window.location.href;
-    
+
     if (navigator.share) {
         navigator.share({
             title: 'ApartaLo',
@@ -367,10 +376,138 @@ function showError(message) {
     alert(message);
 }
 
+// ========================================
+// SOCKET.IO - Conexión en tiempo real
+// ========================================
+
+function initSocket() {
+    if (typeof io === 'undefined') {
+        console.log('Socket.IO no disponible');
+        return;
+    }
+
+    socket = io();
+
+    socket.on('connect', () => {
+        console.log('🔌 Conectado al servidor');
+        // Si ya estamos viendo un negocio, unirnos a su room
+        if (currentBusiness) {
+            socket.emit('join-catalog', currentBusiness);
+            console.log('👁️ Viendo catálogo:', currentBusiness);
+        }
+    });
+
+    socket.on('disconnect', () => {
+        console.log('📴 Desconectado del servidor');
+    });
+
+    // Producto en vivo - mostrar modal
+    socket.on('product-live', (data) => {
+        console.log('📢 Producto en VIVO:', data);
+        showLiveModal(data.producto);
+
+        // Vibrar dispositivo si está soportado
+        if (navigator.vibrate) {
+            navigator.vibrate([100, 50, 100]);
+        }
+    });
+
+    // Stock actualizado
+    socket.on('product-reserved', (data) => {
+        console.log('📦 Stock actualizado:', data);
+        updateProductStock(data.productCode, data.remainingStock);
+    });
+}
+
+// Unirse al room del negocio cuando se abre
+function joinBusinessRoom(businessId) {
+    if (socket && socket.connected) {
+        socket.emit('join-catalog', businessId);
+        console.log('👁️ Viendo catálogo:', businessId);
+    }
+}
+
+// ========================================
+// LIVE MODAL - Producto en tiempo real
+// ========================================
+
+function showLiveModal(producto) {
+    currentLiveProduct = producto;
+
+    const modal = document.getElementById('liveModal');
+    if (!modal) return;
+
+    // Llenar datos del producto
+    document.getElementById('liveProductImage').src = producto.imagen || '/icon-192.svg';
+    document.getElementById('liveProductName').textContent = producto.nombre;
+    document.getElementById('liveProductPrice').textContent = `S/${parseFloat(producto.precio).toFixed(2)}`;
+    document.getElementById('liveProductDesc').textContent = producto.descripcion || '';
+
+    const stock = producto.stock || producto.disponible || 0;
+    document.getElementById('liveProductStock').textContent = `${stock} disponible${stock !== 1 ? 's' : ''}`;
+
+    // Mostrar modal
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeLiveModal() {
+    const modal = document.getElementById('liveModal');
+    if (modal) {
+        modal.classList.remove('active');
+        document.body.style.overflow = '';
+    }
+    currentLiveProduct = null;
+}
+
+function apartarProductoLive() {
+    if (!currentLiveProduct) return;
+
+    // Cerrar modal
+    closeLiveModal();
+
+    // Construir mensaje para WhatsApp
+    const mensaje = `APARTADO_WEB
+Negocio: ${currentBusiness}
+NegocioID: ${currentBusiness}
+Producto: ${currentLiveProduct.codigo || currentLiveProduct.id}
+Nombre: ${currentLiveProduct.nombre}
+Precio: S/${parseFloat(currentLiveProduct.precio).toFixed(2)}
+
+Quiero apartar este producto`;
+
+    // Redirigir a WhatsApp
+    window.location.href = `https://wa.me/${APARTALO_WHATSAPP}?text=${encodeURIComponent(mensaje)}`;
+}
+
+// Actualizar stock en tiempo real
+function updateProductStock(productCode, remainingStock) {
+    // Actualizar en array local
+    const product = products.find(p => p.codigo === productCode || p.id === productCode);
+    if (product) {
+        product.disponible = remainingStock;
+        product.stock = remainingStock;
+
+        // Re-renderizar productos para mostrar cambio
+        renderProducts(products);
+    }
+
+    // Si el modal del live está abierto con este producto, actualizarlo
+    if (currentLiveProduct && (currentLiveProduct.codigo === productCode || currentLiveProduct.id === productCode)) {
+        document.getElementById('liveProductStock').textContent = `${remainingStock} disponible${remainingStock !== 1 ? 's' : ''}`;
+
+        // Si se agotó, cerrar modal
+        if (remainingStock <= 0) {
+            closeLiveModal();
+        }
+    }
+}
+
 // Cerrar modal con ESC
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
         closeProductModal();
+        closeLiveModal();
     }
 });
 
@@ -395,3 +532,4 @@ document.addEventListener('visibilitychange', () => {
 
 // Iniciar cuando carga la página
 document.addEventListener('DOMContentLoaded', init);
+
