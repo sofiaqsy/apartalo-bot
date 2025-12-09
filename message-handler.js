@@ -276,9 +276,16 @@ class MessageHandler {
         }
 
         if (titleLower === 'editar datos') {
-            stateManager.setStep(from, 'datos_nombre');
+            // Preservar datos del producto apartado si existe
+            const sessionData = session.data || {};
+            stateManager.setStep(from, 'datos_nombre', {
+                ...sessionData,
+                fromWeb: sessionData.fromWeb || false
+            });
             return await whatsappService.sendMessage(from,
-                'Vamos a actualizar tus datos.\n\nCual es tu nombre completo?'
+                'Vamos a actualizar tus datos.\n\n' +
+                'Paso 1 de 3\n' +
+                '¿Cuál es tu nombre completo?'
             );
         }
 
@@ -517,50 +524,45 @@ class MessageHandler {
         // Verificar si tenemos datos del cliente
         const cliente = await sheetsService.findClient(businessId, from);
 
-        // CREAR PEDIDO
-        const pedidoData = {
-            whatsapp: from,
-            cliente: cliente?.nombre || 'Cliente Web',
-            telefono: cliente?.telefono || '',
-            direccion: cliente?.direccion || '',
-            items: [{
-                codigo: productId,
-                nombre: producto.nombre,
-                cantidad: 1,
-                precio: producto.precio
-            }],
-            total: producto.precio,
-            observaciones: 'Apartado desde catálogo web'
-        };
-
-        const pedidoResult = await sheetsService.createOrder(businessId, pedidoData);
-
-        if (!pedidoResult.success) {
-            // Liberar stock si falla
-            await sheetsService.releaseStock(businessId, productId, 1);
-            return await whatsappService.sendMessage(from,
-                '❌ Error al procesar tu pedido.\n\n' +
-                'Por favor, intenta nuevamente.'
-            );
-        }
-
-        const pedidoId = pedidoResult.pedidoId;
-        stateManager.setActivePedido(from, businessId, pedidoId);
-
-        // Construir mensaje de éxito
-        let mensajeRespuesta = '¡LO APARTASTE!\n\n';
-        mensajeRespuesta += negocio.nombre + '\n\n';
-        mensajeRespuesta += producto.nombre + '\n';
-        mensajeRespuesta += 'S/' + producto.precio.toFixed(2) + '\n';
-        mensajeRespuesta += 'Pedido: ' + pedidoId + '\n\n';
-        mensajeRespuesta += 'Tienes 30 minutos para completar tu compra.\n\n';
-
         if (cliente && cliente.nombre && cliente.direccion) {
-            // Ya tenemos datos del cliente
-            mensajeRespuesta += 'Tus datos de entrega:\n';
+            // Ya tenemos datos del cliente - CREAR PEDIDO AHORA
+            const pedidoData = {
+                whatsapp: from,
+                cliente: cliente.nombre,
+                telefono: cliente.telefono || '',
+                direccion: cliente.direccion,
+                items: [{
+                    codigo: productId,
+                    nombre: producto.nombre,
+                    cantidad: 1,
+                    precio: producto.precio
+                }],
+                total: producto.precio,
+                observaciones: 'Apartado desde catálogo web'
+            };
+
+            const pedidoResult = await sheetsService.createOrder(businessId, pedidoData);
+
+            if (!pedidoResult.success) {
+                await sheetsService.releaseStock(businessId, productId, 1);
+                return await whatsappService.sendMessage(from,
+                    '❌ Error al procesar tu pedido.\n\n' +
+                    'Por favor, intenta nuevamente.'
+                );
+            }
+
+            const pedidoId = pedidoResult.pedidoId;
+            stateManager.setActivePedido(from, businessId, pedidoId);
+
+            // Construir mensaje de éxito
+            let mensajeRespuesta = '¡LO APARTASTE!\n\n';
+            mensajeRespuesta += negocio.nombre + '\n\n';
+            mensajeRespuesta += producto.nombre + '\n';
+            mensajeRespuesta += 'S/' + producto.precio.toFixed(2) + '\n';
+            mensajeRespuesta += 'Pedido: ' + pedidoId + '\n\n';
+            mensajeRespuesta += 'Datos de entrega:\n';
             mensajeRespuesta += cliente.nombre + '\n';
-            mensajeRespuesta += cliente.direccion + '\n';
-            mensajeRespuesta += (cliente.telefono || 'Sin teléfono') + '\n\n';
+            mensajeRespuesta += cliente.direccion + '\n\n';
 
             // Mostrar datos de pago del negocio
             if (negocio.cuentasBancarias) {
@@ -568,29 +570,45 @@ class MessageHandler {
                 const cuentas = negocio.cuentasBancarias.split('|');
                 cuentas.forEach(cuenta => {
                     const [banco, numero] = cuenta.split(':');
-                    mensajeRespuesta += banco + '\n';
-                    mensajeRespuesta += numero + '\n\n';
+                    if (banco && numero) {
+                        mensajeRespuesta += banco + '\n';
+                        mensajeRespuesta += numero + '\n\n';
+                    }
                 });
             }
 
-            mensajeRespuesta += 'Envía tu comprobante de pago para confirmar.';
+            mensajeRespuesta += 'Tienes 30 minutos para completar el pago.\n';
+            mensajeRespuesta += 'Envía tu comprobante de pago a este chat.';
 
             stateManager.setStep(from, 'esperando_voucher', { pedidoId });
 
             return await whatsappService.sendButtonMessage(from, mensajeRespuesta, [
                 { title: 'Enviar comprobante', id: 'enviar_voucher' },
-                { title: 'Editar datos', id: 'editar' }
+                { title: 'Editar datos', id: 'editar_datos' }
             ]);
 
         } else {
-            // Necesitamos datos del cliente
-            mensajeRespuesta += 'Para completar tu compra, necesito algunos datos.\n\n';
-            mensajeRespuesta += '¿Cuál es tu nombre completo?';
-
+            // NO tenemos datos del cliente - GUARDAR PRODUCTO EN SESIÓN, NO CREAR PEDIDO AÚN
             stateManager.setStep(from, 'datos_nombre', {
-                pedidoId,
-                fromWeb: true
+                fromWeb: true,
+                productoApartado: {
+                    codigo: productId,
+                    nombre: producto.nombre,
+                    precio: producto.precio,
+                    cantidad: 1
+                },
+                businessId: businessId,
+                negocioNombre: negocio.nombre
             });
+
+            let mensajeRespuesta = '¡LO APARTASTE!\n\n';
+            mensajeRespuesta += negocio.nombre + '\n\n';
+            mensajeRespuesta += producto.nombre + '\n';
+            mensajeRespuesta += 'S/' + producto.precio.toFixed(2) + '\n\n';
+            mensajeRespuesta += 'Tienes 30 minutos para completar tu compra.\n\n';
+            mensajeRespuesta += 'Para completar tu pedido, necesito algunos datos.\n\n';
+            mensajeRespuesta += 'Paso 1 de 3\n';
+            mensajeRespuesta += '¿Cuál es tu nombre completo?';
 
             return await whatsappService.sendMessage(from, mensajeRespuesta);
         }
@@ -1062,40 +1080,52 @@ class MessageHandler {
     }
 
     async procesarDatosNombre(from, mensaje) {
+        const session = stateManager.getSession(from);
         const nombre = mensaje.trim();
 
         if (nombre.length < 2) {
             return await whatsappService.sendMessage(from,
-                'Por favor, ingresa tu nombre completo.'
+                'Por favor, ingresa tu nombre completo (mínimo 2 caracteres).'
             );
         }
 
-        stateManager.setStep(from, 'datos_direccion', { nombre });
+        // Preservar datos anteriores de la sesión
+        const datosAnteriores = session.data || {};
+        stateManager.setStep(from, 'datos_direccion', {
+            ...datosAnteriores,
+            nombre
+        });
 
         return await whatsappService.sendMessage(from,
             'Nombre: ' + nombre + '\n\n' +
             'Paso 2 de 3\n\n' +
-            'Cual es tu direccion completa de entrega?\n' +
+            '¿Cuál es tu dirección completa de entrega?\n' +
             'Incluye distrito y referencia'
         );
     }
 
     async procesarDatosDireccion(from, mensaje) {
+        const session = stateManager.getSession(from);
         const direccion = mensaje.trim();
 
         if (direccion.length < 10) {
             return await whatsappService.sendMessage(from,
-                'Por favor, ingresa una direccion mas completa.\n' +
-                'Incluye calle, numero, distrito y referencia.'
+                'Por favor, ingresa una dirección más completa.\n' +
+                'Incluye calle, número, distrito y referencia.'
             );
         }
 
-        stateManager.setStep(from, 'datos_telefono', { direccion });
+        // Preservar datos anteriores de la sesión
+        const datosAnteriores = session.data || {};
+        stateManager.setStep(from, 'datos_telefono', {
+            ...datosAnteriores,
+            direccion
+        });
 
         return await whatsappService.sendMessage(from,
-            'Direccion: ' + direccion + '\n\n' +
+            'Dirección: ' + direccion + '\n\n' +
             'Paso 3 de 3\n\n' +
-            'Cual es tu numero de telefono de contacto?'
+            '¿Cuál es tu número de teléfono de contacto?'
         );
     }
 
@@ -1105,21 +1135,94 @@ class MessageHandler {
 
         if (telefono.length < 7) {
             return await whatsappService.sendMessage(from,
-                'Por favor, ingresa un numero de telefono valido.'
+                'Por favor, ingresa un número de teléfono válido (mínimo 7 dígitos).'
             );
         }
 
+        // Obtener todos los datos de la sesión
+        const sessionData = session.data || {};
+        const nombre = sessionData.nombre;
+        const direccion = sessionData.direccion;
+        const productoApartado = sessionData.productoApartado;
+        const businessId = sessionData.businessId || session.businessId;
+        const fromWeb = sessionData.fromWeb;
+
+        // Guardar datos del cliente
         const cliente = {
-            nombre: session.data.nombre,
-            direccion: session.data.direccion,
+            nombre: nombre,
+            direccion: direccion,
             telefono: telefono,
             whatsapp: from
         };
 
-        stateManager.cacheClient(from, session.businessId, cliente);
-        await sheetsService.saveClient(session.businessId, cliente);
+        stateManager.cacheClient(from, businessId, cliente);
+        await sheetsService.saveClient(businessId, cliente);
 
-        return await this.crearPedido(from, session.businessId, cliente);
+        // Si viene del catálogo web, crear pedido con el producto apartado
+        if (fromWeb && productoApartado) {
+            const negocio = sheetsService.getBusiness(businessId);
+
+            const pedidoData = {
+                whatsapp: from,
+                cliente: nombre,
+                telefono: telefono,
+                direccion: direccion,
+                items: [{
+                    codigo: productoApartado.codigo,
+                    nombre: productoApartado.nombre,
+                    cantidad: productoApartado.cantidad || 1,
+                    precio: productoApartado.precio
+                }],
+                total: productoApartado.precio * (productoApartado.cantidad || 1),
+                observaciones: 'Apartado desde catálogo web'
+            };
+
+            const pedidoResult = await sheetsService.createOrder(businessId, pedidoData);
+
+            if (!pedidoResult.success) {
+                return await whatsappService.sendMessage(from,
+                    '❌ Error al crear tu pedido.\n\n' +
+                    'Por favor, intenta nuevamente.'
+                );
+            }
+
+            const pedidoId = pedidoResult.pedidoId;
+            stateManager.setActivePedido(from, businessId, pedidoId);
+
+            // Construir mensaje con todos los datos
+            let mensaje = '¡Pedido creado!\n\n';
+            mensaje += 'Código: ' + pedidoId + '\n\n';
+            mensaje += 'Productos:\n';
+            mensaje += productoApartado.nombre + ' x' + (productoApartado.cantidad || 1) + '\n\n';
+            mensaje += 'Total: S/' + pedidoData.total.toFixed(2) + '\n\n';
+            mensaje += 'Entrega en:\n' + direccion + '\n\n';
+
+            // Cuentas bancarias
+            if (negocio && negocio.cuentasBancarias) {
+                mensaje += 'CUENTAS PARA PAGAR:\n\n';
+                const cuentas = negocio.cuentasBancarias.split('|');
+                cuentas.forEach(cuenta => {
+                    const [banco, numero] = cuenta.split(':');
+                    if (banco && numero) {
+                        mensaje += banco + '\n' + numero + '\n\n';
+                    }
+                });
+            }
+
+            mensaje += 'Para confirmar tu pedido:\n';
+            mensaje += 'Envía el voucher de tu pago a este chat.\n\n';
+            mensaje += 'Tienes 30 minutos para completar el pago.';
+
+            stateManager.setStep(from, 'esperando_voucher', { pedidoId });
+
+            return await whatsappService.sendButtonMessage(from, mensaje, [
+                { title: 'Enviar comprobante', id: 'enviar_voucher' },
+                { title: 'Editar datos', id: 'editar_datos' }
+            ]);
+        }
+
+        // Flujo normal (carrito de compras)
+        return await this.crearPedido(from, businessId, cliente);
     }
 
     async crearPedido(from, businessId, cliente) {
