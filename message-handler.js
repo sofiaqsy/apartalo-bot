@@ -42,6 +42,11 @@ class MessageHandler {
             }
         }
         
+        // Detectar mensaje de APARTADO desde catálogo web
+        if (mensaje.startsWith('APARTADO_WEB')) {
+            return await this.procesarApartadoWeb(from, mensaje);
+        }
+        
         // COMANDOS GLOBALES
         if (mensajeLower === 'inicio' || mensajeLower === 'home' || mensajeLower === 'hola') {
             stateManager.resetSession(from);
@@ -409,6 +414,126 @@ class MessageHandler {
             { title: 'Pagar ahora', id: 'pagar' },
             { title: 'Ver pedido', id: 'ver_pedido' }
         ]);
+    }
+    
+    // ========================================
+    // APARTADO DESDE CATÁLOGO WEB
+    // ========================================
+    
+    async procesarApartadoWeb(from, mensaje) {
+        console.log('Procesando apartado web:', mensaje);
+        
+        // Parsear datos del mensaje
+        // Formato:
+        // APARTADO_WEB
+        // Negocio: Plantas Vivero
+        // NegocioID: BIZ-001
+        // Producto: PL01
+        // Nombre: Monstera
+        // Precio: S/85.00
+        // PedidoID: PL-123456
+        
+        const lines = mensaje.split('\n');
+        const datos = {};
+        
+        lines.forEach(line => {
+            const match = line.match(/^([^:]+):\s*(.+)$/);
+            if (match) {
+                const key = match[1].trim().toLowerCase().replace(/\s+/g, '');
+                const value = match[2].trim();
+                datos[key] = value;
+            }
+        });
+        
+        const businessId = datos['negocioid'] || datos['businessid'];
+        const productId = datos['producto'] || datos['productid'];
+        const productoNombre = datos['nombre'];
+        const pedidoId = datos['pedidoid'];
+        const precioStr = datos['precio'] || '0';
+        const precio = parseFloat(precioStr.replace(/[^0-9.]/g, ''));
+        const negocioNombre = datos['negocio'];
+        
+        console.log('Datos parseados:', { businessId, productId, productoNombre, pedidoId, precio, negocioNombre });
+        
+        if (!businessId) {
+            return await whatsappService.sendMessage(from,
+                '¡Hola! Bienvenido a ApartaLo.\n\n' +
+                'Parece que hubo un problema con tu reserva.\n' +
+                'Por favor, vuelve al catálogo e intenta nuevamente.'
+            );
+        }
+        
+        // Configurar sesión con el negocio
+        stateManager.setActiveBusiness(from, businessId);
+        
+        // Buscar el negocio
+        const negocio = sheetsService.getBusiness(businessId);
+        
+        if (!negocio) {
+            return await whatsappService.sendMessage(from,
+                '¡Hola! Bienvenido a ApartaLo.\n\n' +
+                'El negocio no está disponible en este momento.\n' +
+                'Por favor, intenta más tarde.'
+            );
+        }
+        
+        // Guardar el pedido activo en la sesión
+        if (pedidoId) {
+            stateManager.setActivePedido(from, businessId, pedidoId);
+        }
+        
+        // Verificar si tenemos datos del cliente
+        const cliente = await sheetsService.findClient(businessId, from);
+        
+        let mensajeRespuesta = '✅ ¡PRODUCTO APARTADO!\n\n';
+        mensajeRespuesta += '🏪 ' + (negocioNombre || negocio.nombre) + '\n\n';
+        mensajeRespuesta += '📦 ' + (productoNombre || 'Producto') + '\n';
+        mensajeRespuesta += '💰 ' + (precioStr.includes('S/') ? precioStr : 'S/' + precio.toFixed(2)) + '\n';
+        if (pedidoId) {
+            mensajeRespuesta += '🆔 Pedido: ' + pedidoId + '\n';
+        }
+        mensajeRespuesta += '\n';
+        mensajeRespuesta += '⏰ Tienes 30 minutos para completar tu compra.\n\n';
+        
+        if (cliente && cliente.nombre && cliente.direccion) {
+            // Ya tenemos datos del cliente, mostrar resumen y pedir pago
+            mensajeRespuesta += 'Tus datos de entrega:\n';
+            mensajeRespuesta += '👤 ' + cliente.nombre + '\n';
+            mensajeRespuesta += '📍 ' + cliente.direccion + '\n';
+            mensajeRespuesta += '📞 ' + (cliente.telefono || 'No registrado') + '\n\n';
+            
+            // Mostrar datos de pago del negocio
+            if (negocio.cuentasBancarias) {
+                mensajeRespuesta += '💳 CUENTAS PARA PAGAR:\n\n';
+                const cuentas = negocio.cuentasBancarias.split('|');
+                cuentas.forEach(cuenta => {
+                    const [banco, numero] = cuenta.split(':');
+                    mensajeRespuesta += '🏦 ' + banco + '\n';
+                    mensajeRespuesta += '   ' + numero + '\n\n';
+                });
+            }
+            
+            mensajeRespuesta += 'Envía tu comprobante de pago aquí para confirmar tu pedido.';
+            
+            stateManager.setStep(from, 'esperando_voucher', { pedidoId });
+            
+            return await whatsappService.sendButtonMessage(from, mensajeRespuesta, [
+                { title: 'Enviar comprobante', id: 'enviar_voucher' },
+                { title: 'Editar datos', id: 'editar' }
+            ]);
+            
+        } else {
+            // Necesitamos datos del cliente
+            mensajeRespuesta += 'Para completar tu compra, necesito algunos datos.\n\n';
+            mensajeRespuesta += '¿Cuál es tu nombre completo?';
+            
+            stateManager.setStep(from, 'datos_nombre', { 
+                pedidoId,
+                fromWeb: true 
+            });
+            
+            return await whatsappService.sendMessage(from, mensajeRespuesta);
+        }
     }
     
     // BIENVENIDA Y SELECCION DE NEGOCIO

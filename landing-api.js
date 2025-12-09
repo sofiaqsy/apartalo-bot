@@ -15,6 +15,9 @@ try {
     console.log('⚠️ Servicios no disponibles, usando mock');
 }
 
+// WhatsApp de ApartaLo
+const APARTALO_WHATSAPP = '19895335574';
+
 /**
  * GET /api/businesses
  * Lista todos los negocios activos
@@ -123,7 +126,8 @@ router.get('/api/products/:businessId', async (req, res) => {
 
 /**
  * POST /api/apartar
- * Registra un producto apartado
+ * Registra un producto apartado en Excel del negocio y de ApartaLo
+ * Luego redirige al WhatsApp de ApartaLo para continuar el flujo
  */
 router.post('/api/apartar', async (req, res) => {
     try {
@@ -137,10 +141,19 @@ router.post('/api/apartar', async (req, res) => {
         }
 
         if (!sheetsService) {
+            // Modo demo - redirigir a ApartaLo
+            const demoMensaje = `APARTADO_WEB
+Negocio: DEMO
+Producto: ${productId}
+Nombre: ${productoNombre || 'Producto Demo'}
+Precio: ${precio || '0'}
+
+Quiero completar mi compra`;
+            
             return res.json({
                 success: true,
                 message: 'Producto apartado (modo demo)',
-                whatsappUrl: `https://wa.me/51999999999?text=${encodeURIComponent('Demo apartado')}`
+                whatsappUrl: `https://wa.me/${APARTALO_WHATSAPP}?text=${encodeURIComponent(demoMensaje)}`
             });
         }
 
@@ -171,10 +184,10 @@ router.post('/api/apartar', async (req, res) => {
             });
         }
 
-        // Reservar stock
+        // 1. Reservar stock en el inventario del negocio
         await sheetsService.reserveStock(businessId, productId, 1);
 
-        // Crear pedido
+        // 2. Crear pedido en la hoja del negocio
         const pedidoData = {
             whatsapp: '',
             cliente: 'Cliente Web',
@@ -187,7 +200,7 @@ router.post('/api/apartar', async (req, res) => {
                 precio: precio
             }],
             total: precio,
-            observaciones: 'Apartado desde catálogo web'
+            observaciones: 'Apartado desde catálogo web - Pendiente datos cliente'
         };
 
         const result = await sheetsService.createOrder(businessId, pedidoData);
@@ -201,17 +214,37 @@ router.post('/api/apartar', async (req, res) => {
             });
         }
 
-        // Generar URL de WhatsApp
-        const phoneNumber = negocio.whatsappNumber;
-        const mensaje = `¡Hola! Acabo de apartar el siguiente producto:
+        // 3. Registrar en hoja de Pedidos de ApartaLo (si existe la función)
+        try {
+            if (sheetsService.registrarPedidoApartaLo) {
+                await sheetsService.registrarPedidoApartaLo({
+                    pedidoId: result.pedidoId,
+                    businessId: businessId,
+                    businessNombre: negocio.nombre,
+                    productId: productId,
+                    productoNombre: productoNombre,
+                    precio: precio,
+                    estado: 'PENDIENTE_CONTACTO',
+                    origen: 'WEB_CATALOGO',
+                    fecha: new Date().toISOString()
+                });
+            }
+        } catch (e) {
+            console.log('⚠️ No se pudo registrar en Pedidos ApartaLo:', e.message);
+        }
 
-📦 *${productoNombre}*
-💰 Precio: S/${parseFloat(precio).toFixed(2)}
-🆔 Pedido: ${result.pedidoId}
+        // 4. Generar URL de WhatsApp de ApartaLo con datos estructurados
+        const mensaje = `APARTADO_WEB
+Negocio: ${negocio.nombre}
+NegocioID: ${businessId}
+Producto: ${productId}
+Nombre: ${productoNombre}
+Precio: S/${parseFloat(precio).toFixed(2)}
+PedidoID: ${result.pedidoId}
 
-Me gustaría completar la compra. ¿Cuáles son los siguientes pasos?`;
+Hola! Acabo de apartar este producto desde el catálogo web. Quiero completar mi compra.`;
 
-        const whatsappUrl = generarWhatsAppUrl(phoneNumber, mensaje);
+        const whatsappUrl = `https://wa.me/${APARTALO_WHATSAPP}?text=${encodeURIComponent(mensaje)}`;
 
         res.json({
             success: true,
@@ -228,19 +261,5 @@ Me gustaría completar la compra. ¿Cuáles son los siguientes pasos?`;
         });
     }
 });
-
-/**
- * Helper: Generar URL de WhatsApp
- */
-function generarWhatsAppUrl(phoneNumber, mensaje) {
-    if (!phoneNumber) {
-        return null;
-    }
-    
-    const cleanPhone = phoneNumber.replace(/\D/g, '');
-    const encodedMessage = encodeURIComponent(mensaje);
-    
-    return `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
-}
 
 module.exports = router;
