@@ -1,27 +1,19 @@
 // Estado global
 let currentBusiness = null;
-let currentViewers = 7;
-let currentProductIndex = 0;
-let mainTimer = null;
+let currentProduct = null;
 let businesses = {};
 let products = [];
 
 // Inicializar app
 async function init() {
-    // Verificar si hay businessId en URL
     const urlParams = new URLSearchParams(window.location.search);
     const businessId = urlParams.get('business');
     
     if (businessId) {
-        // Cargar directamente los productos de ese negocio
         await openBusinessDirect(businessId);
     } else {
-        // Cargar lista de negocios
         await loadBusinesses();
     }
-    
-    // Actualizar viewers cada 3 segundos
-    setInterval(updateViewers, 3000);
 }
 
 // Cargar negocios desde API
@@ -50,7 +42,13 @@ function renderBusinesses(businessList) {
     loading.style.display = 'none';
     
     if (businessList.length === 0) {
-        grid.innerHTML = '<p style="text-align: center; color: #9ca3af;">No hay negocios en vivo ahora</p>';
+        grid.innerHTML = `
+            <div class="empty-state">
+                <div class="empty-icon">📦</div>
+                <p class="empty-text">No hay negocios disponibles</p>
+                <p class="empty-subtext">Pronto tendremos más opciones para ti</p>
+            </div>
+        `;
         return;
     }
     
@@ -59,11 +57,9 @@ function renderBusinesses(businessList) {
             <img src="${business.imagen || '/icon-192.svg'}" class="business-image" onerror="this.src='/icon-192.svg'">
             <div class="business-info">
                 <h3 class="business-name">${business.nombre}</h3>
-                <p class="business-desc">${business.descripcion || 'Productos únicos en vivo'}</p>
+                <p class="business-desc">${business.descripcion || 'Catálogo de productos'}</p>
                 <div class="business-stats">
-                    <div class="live-pulse"></div>
-                    <span class="viewer-stat">${getRandomViewers()}</span>
-                    <span class="viewer-label">viendo ahora</span>
+                    <span class="product-count">📦 Ver catálogo</span>
                 </div>
             </div>
         </div>
@@ -73,9 +69,7 @@ function renderBusinesses(businessList) {
 // Abrir negocio desde home
 async function openBusiness(businessId) {
     currentBusiness = businessId;
-    currentProductIndex = 0;
     
-    // Actualizar URL sin recargar
     const url = new URL(window.location);
     url.searchParams.set('business', businessId);
     window.history.pushState({}, '', url);
@@ -86,9 +80,7 @@ async function openBusiness(businessId) {
 // Abrir negocio directo desde URL
 async function openBusinessDirect(businessId) {
     currentBusiness = businessId;
-    currentProductIndex = 0;
     
-    // Ocultar home y mostrar products
     document.getElementById('homeView').classList.remove('active');
     document.getElementById('productsView').classList.add('active');
     
@@ -103,15 +95,12 @@ async function loadProducts(businessId) {
         
         if (data.success) {
             products = data.products;
-            renderProducts(data.products, data.business);
+            renderCatalogInfo(data.business);
+            renderProducts(data.products);
             
-            // Cambiar de vista
             document.getElementById('homeView').classList.remove('active');
             document.getElementById('productsView').classList.add('active');
-            document.getElementById('productsView').scrollTop = 0;
-            
-            // Iniciar timer
-            startMainTimer();
+            window.scrollTo(0, 0);
         } else {
             showError('Error cargando productos');
         }
@@ -121,125 +110,150 @@ async function loadProducts(businessId) {
     }
 }
 
-// Renderizar productos
-function renderProducts(productList, business) {
-    const feed = document.getElementById('productsFeed');
+// Renderizar info del catálogo
+function renderCatalogInfo(business) {
+    const container = document.getElementById('catalogInfo');
+    
+    container.innerHTML = `
+        <div class="catalog-header">
+            <img src="${business.imagen || '/icon-192.svg'}" class="catalog-logo" onerror="this.src='/icon-192.svg'">
+            <div>
+                <h1 class="catalog-title">${business.nombre}</h1>
+                <p class="catalog-subtitle">${business.descripcion || 'Catálogo de productos'}</p>
+            </div>
+        </div>
+        <div class="catalog-contact">
+            ${business.whatsapp ? `<a href="https://wa.me/${business.whatsapp}" target="_blank" class="contact-btn">💬 WhatsApp</a>` : ''}
+            ${business.tiktok ? `<a href="${business.tiktok}" target="_blank" class="contact-btn">🎵 TikTok</a>` : ''}
+        </div>
+    `;
+}
+
+// Renderizar productos en grid
+function renderProducts(productList) {
+    const grid = document.getElementById('productsGrid');
     
     if (productList.length === 0) {
-        feed.innerHTML = `
-            <div style="text-align: center; padding: 3rem; color: #9ca3af;">
-                <p>No hay productos disponibles en este momento</p>
-                <button onclick="goBack()" style="margin-top: 1rem; padding: 0.5rem 1rem; background: var(--primary); border: none; border-radius: 8px; color: white; cursor: pointer;">Volver</button>
+        grid.innerHTML = `
+            <div class="empty-state" style="grid-column: 1 / -1;">
+                <div class="empty-icon">📦</div>
+                <p class="empty-text">No hay productos disponibles</p>
+                <p class="empty-subtext">Vuelve pronto para ver nuevos productos</p>
+                <button onclick="goBack()" style="margin-top: 1rem; padding: 0.75rem 1.5rem; background: var(--primary); border: none; border-radius: 8px; color: #000; font-weight: 600; cursor: pointer;">Volver</button>
             </div>
         `;
         return;
     }
     
-    feed.innerHTML = productList.map((product, index) => `
-        <div class="product-item" id="product-${index}">
-            <div class="product-bg">
-                <img src="${product.imagen || '/icon-192.svg'}" class="product-bg-image" onerror="this.src='/icon-192.svg'">
-                <div class="product-bg-gradient"></div>
-            </div>
-            
-            <div class="product-top-bar">
-                <div class="business-info-top">
-                    <img src="${business.imagen || '/icon-192.svg'}" class="business-avatar" onerror="this.src='/icon-192.svg'">
-                    <span class="business-name-top">${business.nombre}</span>
+    grid.innerHTML = productList.map((product, index) => {
+        const isAvailable = product.disponible > 0 && product.estado !== 'APARTADO';
+        const images = product.imagen ? product.imagen.split('|').filter(i => i) : [];
+        const imageCount = images.length;
+        const mainImage = images[0] || '/icon-192.svg';
+        
+        return `
+            <div class="product-card ${!isAvailable ? 'sold-out' : ''}" onclick="openProductModal(${index})">
+                <div class="product-image-container">
+                    <img src="${mainImage}" class="product-image" onerror="this.src='/icon-192.svg'">
+                    <span class="product-badge ${isAvailable ? 'badge-available' : 'badge-sold'}">
+                        ${isAvailable ? 'Disponible' : 'Agotado'}
+                    </span>
+                    ${imageCount > 1 ? `<span class="image-count">📷 ${imageCount}</span>` : ''}
                 </div>
-                <a href="${business.tiktok || '#'}" target="_blank" class="tiktok-button" ${!business.tiktok ? 'style="display:none"' : ''}>
-                    Ver TikTok →
-                </a>
-            </div>
-            
-            <div class="timer-badge" id="timer-badge-${index}">
-                <div class="timer-left">
-                    <span>Quedan</span>
-                    <span class="timer-value" id="timer-${index}">60</span>
-                    <span>seg</span>
-                </div>
-                <div class="timer-viewers">
-                    <span id="timer-viewers-${index}">${currentViewers}</span>
-                    <span>viendo</span>
+                <div class="product-details">
+                    <h3 class="product-name">${product.nombre}</h3>
+                    <div class="product-price">S/${parseFloat(product.precio).toFixed(2)}</div>
+                    ${product.descripcion ? `<p class="product-desc">${product.descripcion}</p>` : ''}
+                    <button 
+                        class="apartalo-btn ${!isAvailable ? 'reserved' : ''}" 
+                        onclick="event.stopPropagation(); apartarProducto(${index})"
+                        ${!isAvailable ? 'disabled' : ''}
+                    >
+                        ${isAvailable ? '🛒 Apartar' : '✓ Apartado'}
+                    </button>
                 </div>
             </div>
-            
-            <div class="product-info">
-                <h2 class="product-name">${product.nombre}</h2>
-                <div class="product-price">S/${parseFloat(product.precio).toFixed(2)}</div>
-                <p class="product-desc">${product.descripcion || 'Producto único disponible'}</p>
-                <button 
-                    class="apartalo-button" 
-                    onclick="apartarProducto(${index})"
-                    ${product.estado === 'apartado' ? 'disabled' : ''}
-                >
-                    ${product.estado === 'apartado' ? '✓ APARTADO' : 'APARTALO'}
-                </button>
+        `;
+    }).join('');
+}
+
+// Abrir modal de producto
+function openProductModal(index) {
+    const product = products[index];
+    if (!product) return;
+    
+    currentProduct = { ...product, index };
+    
+    const modal = document.getElementById('productModal');
+    const gallery = document.getElementById('modalGallery');
+    const info = document.getElementById('modalInfo');
+    
+    const images = product.imagen ? product.imagen.split('|').filter(i => i) : [];
+    const mainImage = images[0] || '/icon-192.svg';
+    const isAvailable = product.disponible > 0 && product.estado !== 'APARTADO';
+    
+    // Renderizar galería
+    gallery.innerHTML = `
+        <img src="${mainImage}" class="gallery-main-image" id="galleryMainImage" onerror="this.src='/icon-192.svg'">
+        ${images.length > 1 ? `
+            <div class="gallery-thumbnails">
+                ${images.map((img, i) => `
+                    <img src="${img}" class="gallery-thumb ${i === 0 ? 'active' : ''}" onclick="changeGalleryImage('${img}', this)" onerror="this.style.display='none'">
+                `).join('')}
             </div>
+        ` : ''}
+    `;
+    
+    // Renderizar info
+    info.innerHTML = `
+        <h2 class="modal-product-name">${product.nombre}</h2>
+        <div class="modal-product-price">S/${parseFloat(product.precio).toFixed(2)}</div>
+        ${product.descripcion ? `<p class="modal-product-desc">${product.descripcion}</p>` : ''}
+        <div class="modal-stock">
+            ${isAvailable ? `✓ ${product.disponible} disponible(s)` : '✗ Agotado'}
         </div>
-    `).join('');
-}
-
-// Timer principal
-function startMainTimer() {
-    stopMainTimer();
+        <button 
+            class="modal-apartalo-btn" 
+            onclick="apartarProducto(${index})"
+            ${!isAvailable ? 'disabled' : ''}
+        >
+            ${isAvailable ? '🛒 APARTAR AHORA' : '✓ PRODUCTO APARTADO'}
+        </button>
+    `;
     
-    let timeLeft = 60;
-    
-    mainTimer = setInterval(() => {
-        timeLeft--;
-        
-        const timerEl = document.getElementById(`timer-${currentProductIndex}`);
-        const badgeEl = document.getElementById(`timer-badge-${currentProductIndex}`);
-        
-        if (timerEl) {
-            timerEl.textContent = timeLeft;
-            
-            if (timeLeft <= 10 && badgeEl) {
-                badgeEl.classList.add('urgent');
-            } else if (badgeEl) {
-                badgeEl.classList.remove('urgent');
-            }
-        }
-        
-        if (timeLeft <= 0) {
-            currentProductIndex = (currentProductIndex + 1) % products.length;
-            scrollToProduct(currentProductIndex);
-            timeLeft = 60;
-        }
-    }, 1000);
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden';
 }
 
-function stopMainTimer() {
-    if (mainTimer) {
-        clearInterval(mainTimer);
-        mainTimer = null;
-    }
+// Cambiar imagen en galería
+function changeGalleryImage(src, thumb) {
+    document.getElementById('galleryMainImage').src = src;
+    document.querySelectorAll('.gallery-thumb').forEach(t => t.classList.remove('active'));
+    thumb.classList.add('active');
 }
 
-// Scroll a producto
-function scrollToProduct(index) {
-    const product = document.getElementById(`product-${index}`);
-    if (product) {
-        product.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
+// Cerrar modal de producto
+function closeProductModal() {
+    document.getElementById('productModal').classList.remove('active');
+    document.body.style.overflow = '';
+    currentProduct = null;
 }
 
 // Apartar producto
 async function apartarProducto(index) {
     const product = products[index];
-    const btn = document.querySelector(`#product-${index} .apartalo-button`);
     
-    // Deshabilitar botón
-    btn.disabled = true;
-    btn.textContent = 'Procesando...';
+    // Encontrar todos los botones de este producto
+    const btns = document.querySelectorAll(`[onclick*="apartarProducto(${index})"]`);
+    btns.forEach(btn => {
+        btn.disabled = true;
+        btn.textContent = '⏳ Procesando...';
+    });
     
     try {
         const response = await fetch('/api/apartar', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
+            headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 businessId: currentBusiness,
                 productId: product.id,
@@ -251,15 +265,21 @@ async function apartarProducto(index) {
         const data = await response.json();
         
         if (data.success) {
-            btn.classList.add('reserved');
-            btn.textContent = '✓ APARTADO';
+            // Actualizar botones
+            btns.forEach(btn => {
+                btn.classList.add('reserved');
+                btn.textContent = '✓ APARTADO';
+            });
             
-            // Mostrar overlay
-            document.getElementById('winnerOverlay').classList.add('show');
+            // Cerrar modal si está abierto
+            closeProductModal();
             
-            // Countdown y redirección a WhatsApp
+            // Mostrar overlay de éxito
+            document.getElementById('successOverlay').classList.add('show');
+            
+            // Countdown y redirección
             let countdown = 3;
-            const timerEl = document.getElementById('nextTimer');
+            const timerEl = document.getElementById('countdownTimer');
             
             const countdownInterval = setInterval(() => {
                 countdown--;
@@ -267,43 +287,44 @@ async function apartarProducto(index) {
                 
                 if (countdown <= 0) {
                     clearInterval(countdownInterval);
-                    document.getElementById('winnerOverlay').classList.remove('show');
+                    document.getElementById('successOverlay').classList.remove('show');
                     
-                    // Redirigir a WhatsApp
                     if (data.whatsappUrl) {
                         window.location.href = data.whatsappUrl;
                     }
                     
-                    // Avanzar al siguiente producto
-                    currentProductIndex = (index + 1) % products.length;
-                    scrollToProduct(currentProductIndex);
+                    // Actualizar producto en el array
+                    products[index].estado = 'APARTADO';
+                    products[index].disponible = Math.max(0, product.disponible - 1);
+                    renderProducts(products);
                 }
             }, 1000);
         } else {
-            btn.disabled = false;
-            btn.textContent = 'APARTALO';
+            btns.forEach(btn => {
+                btn.disabled = false;
+                btn.textContent = '🛒 Apartar';
+            });
             showError(data.error || 'Error al apartar producto');
         }
     } catch (error) {
         console.error('Error:', error);
-        btn.disabled = false;
-        btn.textContent = 'APARTALO';
+        btns.forEach(btn => {
+            btn.disabled = false;
+            btn.textContent = '🛒 Apartar';
+        });
         showError('Error de conexión');
     }
 }
 
 // Volver al home
 function goBack() {
-    stopMainTimer();
-    
-    // Limpiar URL
     const url = new URL(window.location);
     url.searchParams.delete('business');
     window.history.pushState({}, '', url);
     
-    // Cambiar vista
     document.getElementById('productsView').classList.remove('active');
     document.getElementById('homeView').classList.add('active');
+    closeProductModal();
     window.scrollTo(0, 0);
 }
 
@@ -313,12 +334,11 @@ function shareLink() {
     
     if (navigator.share) {
         navigator.share({
-            title: 'ApartaLo - Live Shopping',
-            text: '¡Mira estos productos únicos en vivo!',
+            title: 'ApartaLo - Catálogo de Productos',
+            text: '¡Mira estos productos!',
             url: url
         }).catch(err => console.log('Error sharing:', err));
     } else {
-        // Copiar al portapapeles
         navigator.clipboard.writeText(url).then(() => {
             alert('¡Link copiado al portapapeles!');
         }).catch(err => {
@@ -327,24 +347,24 @@ function shareLink() {
     }
 }
 
-// Actualizar viewers
-function updateViewers() {
-    const change = Math.random() > 0.5 ? 1 : -1;
-    currentViewers = Math.max(3, Math.min(20, currentViewers + change));
-    
-    document.querySelectorAll('[id^="timer-viewers-"]').forEach(el => {
-        el.textContent = currentViewers;
-    });
-}
-
-// Helpers
-function getRandomViewers() {
-    return Math.floor(Math.random() * 15) + 5;
-}
-
+// Mostrar error
 function showError(message) {
     alert(message);
 }
+
+// Cerrar modal con ESC
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeProductModal();
+    }
+});
+
+// Cerrar modal al hacer clic fuera
+document.getElementById('productModal')?.addEventListener('click', (e) => {
+    if (e.target.classList.contains('product-modal')) {
+        closeProductModal();
+    }
+});
 
 // Iniciar cuando carga la página
 document.addEventListener('DOMContentLoaded', init);

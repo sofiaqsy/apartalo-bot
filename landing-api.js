@@ -1,17 +1,16 @@
 /**
  * Landing API Routes
- * Rutas específicas para el nuevo landing tipo TikTok
+ * Rutas para el catálogo público de productos
  */
 
 const express = require('express');
 const router = express.Router();
 
-// Importar servicios (ajustar paths según tu estructura)
-let sheetsService, liveManager;
+// Importar servicios
+let sheetsService;
 
 try {
     sheetsService = require('./sheets-service');
-    liveManager = require('./live-manager');
 } catch (e) {
     console.log('⚠️ Servicios no disponibles, usando mock');
 }
@@ -34,9 +33,9 @@ router.get('/api/businesses', async (req, res) => {
         const businesses = negocios.map(n => ({
             id: n.id,
             nombre: n.nombre,
-            descripcion: n.descripcion || 'Productos únicos en vivo',
+            descripcion: n.descripcion || 'Catálogo de productos',
             imagen: n.logoUrl || '',
-            telefono: n.whatsappNumber || '',
+            whatsapp: n.whatsappNumber || '',
             tiktok: n.tiktokUrl || ''
         }));
         
@@ -65,7 +64,7 @@ router.get('/api/products/:businessId', async (req, res) => {
         if (!sheetsService) {
             return res.json({
                 success: true,
-                business: { id: businessId, nombre: 'Demo', imagen: '', tiktok: '', telefono: '' },
+                business: { id: businessId, nombre: 'Demo', imagen: '', tiktok: '', whatsapp: '' },
                 products: []
             });
         }
@@ -80,28 +79,31 @@ router.get('/api/products/:businessId', async (req, res) => {
             });
         }
 
-        // Obtener inventario
-        const inventario = await sheetsService.getInventory(businessId);
+        // Obtener inventario (true para incluir todos, luego filtramos)
+        const inventario = await sheetsService.getInventory(businessId, true);
         
-        // Filtrar solo productos activos con stock
+        // Filtrar productos activos
         const products = inventario
-            .filter(p => p.estado === 'ACTIVO' && p.disponible > 0)
+            .filter(p => p.estado === 'ACTIVO')
             .map(p => ({
                 id: p.codigo,
                 codigo: p.codigo,
                 nombre: p.nombre,
-                descripcion: p.descripcion || 'Producto único disponible',
+                descripcion: p.descripcion || '',
                 precio: p.precio,
                 imagen: p.imagenUrl || '',
-                estado: 'disponible' // Siempre disponible por ahora
+                disponible: p.disponible,
+                stock: p.stock,
+                estado: p.disponible > 0 ? 'disponible' : 'agotado'
             }));
         
         const business = {
             id: negocio.id,
             nombre: negocio.nombre,
+            descripcion: negocio.descripcion || '',
             imagen: negocio.logoUrl || '',
             tiktok: negocio.tiktokUrl || '',
-            telefono: negocio.whatsappNumber || ''
+            whatsapp: negocio.whatsappNumber || ''
         };
         
         res.json({
@@ -135,7 +137,6 @@ router.post('/api/apartar', async (req, res) => {
         }
 
         if (!sheetsService) {
-            // Mock para desarrollo
             return res.json({
                 success: true,
                 message: 'Producto apartado (modo demo)',
@@ -153,7 +154,7 @@ router.post('/api/apartar', async (req, res) => {
             });
         }
 
-        // Verificar que el producto exista
+        // Verificar producto
         const producto = await sheetsService.getProductByCode(businessId, productId);
         
         if (!producto) {
@@ -166,14 +167,17 @@ router.post('/api/apartar', async (req, res) => {
         if (producto.disponible <= 0) {
             return res.status(400).json({
                 success: false,
-                error: 'Producto sin stock'
+                error: 'Producto sin stock disponible'
             });
         }
 
-        // Crear pedido simplificado
+        // Reservar stock
+        await sheetsService.reserveStock(businessId, productId, 1);
+
+        // Crear pedido
         const pedidoData = {
             whatsapp: '',
-            cliente: 'Cliente Landing',
+            cliente: 'Cliente Web',
             telefono: '',
             direccion: '',
             items: [{
@@ -183,12 +187,14 @@ router.post('/api/apartar', async (req, res) => {
                 precio: precio
             }],
             total: precio,
-            observaciones: 'Apartado desde landing web'
+            observaciones: 'Apartado desde catálogo web'
         };
 
         const result = await sheetsService.createOrder(businessId, pedidoData);
 
         if (!result.success) {
+            // Liberar stock si falla
+            await sheetsService.releaseStock(businessId, productId, 1);
             return res.status(500).json({
                 success: false,
                 error: 'Error creando pedido'
@@ -197,10 +203,10 @@ router.post('/api/apartar', async (req, res) => {
 
         // Generar URL de WhatsApp
         const phoneNumber = negocio.whatsappNumber;
-        const mensaje = `¡Hola! Acabo de apartar el siguiente producto en ApartaLo:
+        const mensaje = `¡Hola! Acabo de apartar el siguiente producto:
 
 📦 *${productoNombre}*
-💰 Precio: S/${precio}
+💰 Precio: S/${parseFloat(precio).toFixed(2)}
 🆔 Pedido: ${result.pedidoId}
 
 Me gustaría completar la compra. ¿Cuáles son los siguientes pasos?`;
@@ -231,10 +237,7 @@ function generarWhatsAppUrl(phoneNumber, mensaje) {
         return null;
     }
     
-    // Limpiar número (solo dígitos)
     const cleanPhone = phoneNumber.replace(/\D/g, '');
-    
-    // Codificar mensaje
     const encodedMessage = encodeURIComponent(mensaje);
     
     return `https://wa.me/${cleanPhone}?text=${encodedMessage}`;
