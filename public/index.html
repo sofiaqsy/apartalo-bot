@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="es">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
@@ -8,6 +9,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/css/landing.css">
 </head>
+
 <body>
     <!-- HOME VIEW -->
     <div id="homeView" class="view active">
@@ -56,12 +58,18 @@
         </div>
     </div>
 
-    <!-- LIVE MODAL - Producto en tiempo real -->
+    <!-- LIVE MODAL - Producto en tiempo real con contador -->
     <div class="live-modal" id="liveModal">
         <div class="live-modal-overlay" onclick="closeLiveModal()"></div>
         <div class="live-modal-content">
             <button class="live-modal-close" onclick="closeLiveModal()">×</button>
-            <span class="live-badge">🔴 EN VIVO</span>
+
+            <!-- Contador Regresivo -->
+            <div class="live-countdown-badge" id="liveCountdown">
+                <span class="countdown-icon"></span>
+                <span class="countdown-time" id="countdownTime">01:00</span>
+            </div>
+
             <img id="liveProductImage" class="live-product-image" src="" alt="" onerror="this.src='/icon-192.svg'">
             <div class="live-product-info">
                 <h2 id="liveProductName"></h2>
@@ -69,7 +77,7 @@
                 <p id="liveProductDesc" class="live-product-desc"></p>
                 <div id="liveProductStock" class="live-product-stock"></div>
                 <button class="live-apartalo-btn" onclick="apartarProductoLive()">
-                    🛒 APARTAR AHORA
+                    APARTAR AHORA
                 </button>
             </div>
         </div>
@@ -79,4 +87,5 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="/js/landing.js"></script>
 </body>
+
 </html>

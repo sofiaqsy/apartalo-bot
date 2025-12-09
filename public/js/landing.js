@@ -9,6 +9,10 @@ let imageRotationIntervals = {}; // Para manejar los intervalos de rotación
 let socket = null;
 let currentLiveProduct = null;
 
+// Countdown timer para modal LIVE
+let liveCountdownInterval = null;
+let liveSecondsRemaining = 60;
+
 // Inicializar app
 async function init() {
     // Inicializar Socket.IO
@@ -456,7 +460,7 @@ function joinBusinessRoom(businessId) {
 }
 
 // ========================================
-// LIVE MODAL - Producto en tiempo real
+// LIVE MODAL - Producto en tiempo real con contador
 // ========================================
 
 function showLiveModal(producto) {
@@ -466,7 +470,10 @@ function showLiveModal(producto) {
     if (!modal) return;
 
     // Llenar datos del producto
-    document.getElementById('liveProductImage').src = producto.imagen || '/icon-192.svg';
+    const images = producto.imagen ? producto.imagen.split('|') : [];
+    const mainImg = images[0] || '/icon-192.svg';
+
+    document.getElementById('liveProductImage').src = mainImg;
     document.getElementById('liveProductName').textContent = producto.nombre;
     document.getElementById('liveProductPrice').textContent = `S/${parseFloat(producto.precio).toFixed(2)}`;
     document.getElementById('liveProductDesc').textContent = producto.descripcion || '';
@@ -474,38 +481,111 @@ function showLiveModal(producto) {
     const stock = producto.stock || producto.disponible || 0;
     document.getElementById('liveProductStock').textContent = `${stock} disponible${stock !== 1 ? 's' : ''}`;
 
+    // Resetear contador a 60 segundos
+    liveSecondsRemaining = 60;
+    updateCountdownDisplay();
+
+    // Quitar clase urgent si quedó
+    const countdownBadge = document.getElementById('liveCountdown');
+    if (countdownBadge) {
+        countdownBadge.classList.remove('urgent');
+    }
+
     // Mostrar modal
     modal.classList.add('active');
+    modal.classList.remove('closing');
     document.body.style.overflow = 'hidden';
+
+    // Vibrar dispositivo si es posible
+    if (navigator.vibrate) {
+        navigator.vibrate([100, 50, 100]);
+    }
+
+    // Iniciar countdown
+    startLiveCountdown();
+}
+
+function startLiveCountdown() {
+    // Limpiar intervalo anterior si existe
+    if (liveCountdownInterval) {
+        clearInterval(liveCountdownInterval);
+    }
+
+    liveCountdownInterval = setInterval(() => {
+        liveSecondsRemaining--;
+        updateCountdownDisplay();
+
+        // Añadir clase urgente en últimos 10 segundos
+        if (liveSecondsRemaining <= 10) {
+            const countdownBadge = document.getElementById('liveCountdown');
+            if (countdownBadge) {
+                countdownBadge.classList.add('urgent');
+            }
+        }
+
+        // Cerrar modal cuando llegue a 0
+        if (liveSecondsRemaining <= 0) {
+            closeLiveModal();
+        }
+    }, 1000);
+}
+
+function updateCountdownDisplay() {
+    const countdownEl = document.getElementById('countdownTime');
+    if (!countdownEl) return;
+
+    const minutes = Math.floor(liveSecondsRemaining / 60);
+    const seconds = liveSecondsRemaining % 60;
+    countdownEl.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
 function closeLiveModal() {
     const modal = document.getElementById('liveModal');
-    if (modal) {
-        modal.classList.remove('active');
-        document.body.style.overflow = '';
+    if (!modal) return;
+
+    // Limpiar countdown
+    if (liveCountdownInterval) {
+        clearInterval(liveCountdownInterval);
+        liveCountdownInterval = null;
     }
-    currentLiveProduct = null;
+
+    // Animación de cierre
+    modal.classList.add('closing');
+
+    setTimeout(() => {
+        modal.classList.remove('active', 'closing');
+        document.body.style.overflow = '';
+
+        // Resetear countdown badge
+        const countdownBadge = document.getElementById('liveCountdown');
+        if (countdownBadge) {
+            countdownBadge.classList.remove('urgent');
+        }
+
+        currentLiveProduct = null;
+    }, 300);
 }
 
 function apartarProductoLive() {
-    if (!currentLiveProduct) return;
+    if (!currentLiveProduct || !currentBusiness) {
+        console.error('No hay producto o negocio activo');
+        return;
+    }
 
-    // Cerrar modal
+    const producto = currentLiveProduct;
+
+    // Construir mensaje para WhatsApp (mismo formato que catálogo regular)
+    const mensaje = `APARTADO_WEB
+NegocioId: ${currentBusiness}
+Producto: ${producto.codigo || producto.id}
+Nombre: ${producto.nombre}
+Precio: S/${parseFloat(producto.precio).toFixed(2)}`;
+
+    // Cerrar modal primero
     closeLiveModal();
 
-    // Construir mensaje para WhatsApp
-    const mensaje = `APARTADO_WEB
-Negocio: ${currentBusiness}
-NegocioID: ${currentBusiness}
-Producto: ${currentLiveProduct.codigo || currentLiveProduct.id}
-Nombre: ${currentLiveProduct.nombre}
-Precio: S/${parseFloat(currentLiveProduct.precio).toFixed(2)}
-
-Quiero apartar este producto`;
-
     // Redirigir a WhatsApp
-    window.location.href = `https://wa.me/${APARTALO_WHATSAPP}?text=${encodeURIComponent(mensaje)}`;
+    window.open(`https://wa.me/${APARTALO_WHATSAPP}?text=${encodeURIComponent(mensaje)}`, '_blank');
 }
 
 // Actualizar stock en tiempo real
