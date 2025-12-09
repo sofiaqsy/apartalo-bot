@@ -720,6 +720,17 @@
             color: var(--text-muted);
         }
 
+        /* Stock bajo - resaltar */
+        .live-product-item.low-stock-item {
+            border: 1px solid rgba(245, 158, 11, 0.5);
+            background: rgba(245, 158, 11, 0.05);
+        }
+
+        .live-product-stock.stock-warning {
+            color: #f59e0b;
+            font-weight: 600;
+        }
+
         .btn-broadcast {
             background: var(--live);
             color: white;
@@ -1353,10 +1364,13 @@
 
     <div class="toast" id="toast"></div>
 
+    <!-- Socket.IO para actualizaciones en tiempo real -->
+    <script src="/socket.io/socket.io.js"></script>
     <script>
         let currentBusiness = null, businesses = [], products = [], orders = [], clients = [];
         let currentOrder = null, selectedStatus = null;
         let liveStats = { subscribers: [], products: [] }, sentProducts = new Set();
+        let adminSocket = null; // Socket.IO para admin
         let existingImageUrls = []; // URLs de imágenes ya guardadas
         let newImageFiles = []; // Archivos nuevos a subir
         let imagesToDelete = []; // URLs de imágenes a eliminar
@@ -1372,7 +1386,54 @@
             { id: 'ENTREGADO', label: 'Entregado' }
         ];
 
-        async function init() { await loadBusinesses(); setupNavigation(); setupFilters(); registerSW(); setInterval(refreshLiveStats, 10000); }
+        async function init() {
+            await loadBusinesses();
+            setupNavigation();
+            setupFilters();
+            registerSW();
+            initAdminSocket();
+            setInterval(refreshLiveStats, 10000);
+        }
+
+        // Inicializar Socket.IO para actualizaciones en tiempo real
+        function initAdminSocket() {
+            if (typeof io === 'undefined') {
+                console.warn('Socket.IO no disponible');
+                return;
+            }
+
+            adminSocket = io();
+
+            adminSocket.on('connect', () => {
+                console.log('🔌 Admin conectado a Socket.IO');
+                if (currentBusiness) {
+                    adminSocket.emit('join-admin', currentBusiness);
+                }
+            });
+
+            // Cuando se reserva un producto, actualizar la lista LIVE
+            adminSocket.on('product-reserved', async (data) => {
+                console.log('📦 Stock actualizado:', data);
+
+                if (data.businessId === currentBusiness) {
+                    // Recargar productos para reflejar nuevo stock
+                    await loadProducts();
+
+                    // Notificar si llegó a 0
+                    if (data.remainingStock === 0) {
+                        showToast(`⚠️ ${data.productCode} agotado`, 'warning');
+                    }
+                }
+            });
+        }
+
+        // Unirse al room del negocio cuando se selecciona
+        function joinAdminRoom(businessId) {
+            if (adminSocket && adminSocket.connected) {
+                adminSocket.emit('join-admin', businessId);
+                console.log('👁️ Admin viendo:', businessId);
+            }
+        }
         function registerSW() { if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(e => console.log(e)); }
 
         async function api(endpoint, options = {}) {
@@ -1388,11 +1449,17 @@
                 businesses = data.data;
                 document.getElementById('businessSelect').innerHTML = businesses.map(b => `<option value="${b.id}">${b.nombre} (${b.prefijo})</option>`).join('');
                 currentBusiness = businesses[0].id;
+                joinAdminRoom(currentBusiness);
                 loadAllData();
             }
         }
 
-        function changeBusiness() { currentBusiness = document.getElementById('businessSelect').value; loadAllData(); sentProducts.clear(); }
+        function changeBusiness() {
+            currentBusiness = document.getElementById('businessSelect').value;
+            joinAdminRoom(currentBusiness);
+            loadAllData();
+            sentProducts.clear();
+        }
         async function loadAllData() { if (!currentBusiness) return; await Promise.all([loadProducts(), loadOrders(), loadClients(), loadStats(), refreshLiveStats()]); }
         async function refreshData() { document.querySelector('.refresh-btn').classList.add('loading'); await loadAllData(); document.querySelector('.refresh-btn').classList.remove('loading'); showToast('Datos actualizados', 'success'); }
 
@@ -1444,27 +1511,47 @@
 
         function renderLiveProducts() {
             const list = document.getElementById('live-products-list');
-            const available = products.filter(p => p.disponible > 0 && p.estado === 'ACTIVO');
+
+            // Filtrar TODOS los productos con stock disponible > 0 (sin importar estado)
+            const available = products.filter(p => p.disponible > 0);
+
+            // Ordenar: PUBLICADOS primero, luego por disponibilidad descendente
+            available.sort((a, b) => {
+                // Primero por estado (PUBLICADO primero)
+                if (a.estado === 'PUBLICADO' && b.estado !== 'PUBLICADO') return -1;
+                if (a.estado !== 'PUBLICADO' && b.estado === 'PUBLICADO') return 1;
+                // Luego por disponibilidad (más stock primero)
+                return b.disponible - a.disponible;
+            });
+
             if (available.length === 0) {
-                list.innerHTML = '<div class="empty-state"><p>No hay productos disponibles</p></div>';
+                list.innerHTML = '<div class="empty-state"><p>No hay productos con stock disponible</p><small>Agrega stock a tus productos para verlos aquí</small></div>';
                 return;
             }
+
             list.innerHTML = available.map(p => {
                 const isSent = sentProducts.has(p.codigo);
-                // Obtener primera imagen si hay múltiples
                 const primeraImagen = p.imagenUrl ? p.imagenUrl.split('|')[0] : '';
-                return `<div class="live-product-item ${isSent ? 'live-product-sent' : ''}" id="live-product-${p.codigo}">
+                const isPublished = p.estado === 'PUBLICADO';
+                const lowStock = p.disponible <= 5;
+                const estadoEmoji = isPublished ? '🟢' : (p.estado === 'INACTIVO' ? '🔴' : '🟡');
+
+                return `<div class="live-product-item ${isSent ? 'live-product-sent' : ''} ${lowStock ? 'low-stock-item' : ''}" id="live-product-${p.codigo}">
                     ${primeraImagen ? `<img src="${primeraImagen}" class="live-product-img" onerror="this.style.display='none'">` : '<div class="live-product-img"></div>'}
                     <div class="live-product-info">
-                        <div class="live-product-name">${p.codigo} - ${p.nombre}</div>
+                        <div class="live-product-name">${estadoEmoji} ${p.codigo} - ${p.nombre}</div>
                         <div class="live-product-price">S/${p.precio.toFixed(2)}</div>
-                        <div class="live-product-stock">${p.disponible} disponible(s)</div>
+                        <div class="live-product-stock ${lowStock ? 'stock-warning' : ''}">${p.disponible} disponible(s) ${lowStock ? '⚠️' : ''}</div>
                     </div>
                     <button class="btn-broadcast" onclick="broadcastProduct('${p.codigo}')" ${isSent ? 'disabled' : ''}>
                         ${isSent ? '✓ Enviado' : '📢 Enviar'}
                     </button>
                 </div>`;
             }).join('');
+
+            // Actualizar contador
+            const countEl = document.getElementById('live-products-count');
+            if (countEl) countEl.textContent = available.length;
         }
 
         async function broadcastProduct(codigo) {
