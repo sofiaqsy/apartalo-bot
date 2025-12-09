@@ -8,6 +8,7 @@ const router = express.Router();
 const sheetsService = require('./sheets-service');
 const liveManager = require('./live-manager');
 const whatsappService = require('./whatsapp-service');
+const catalogSocket = require('./catalog-socket');
 
 // ========================================
 // NEGOCIOS
@@ -145,7 +146,7 @@ router.post('/:businessId/upload-image', async (req, res) => {
     }
 });
 
-// POST /api/:businessId/productos - Crear producto
+// POST /api/:businessId/productos - Crear producto (estado ACTIVO por defecto, no publicado)
 router.post('/:businessId/productos', async (req, res) => {
     try {
         const { businessId } = req.params;
@@ -165,7 +166,7 @@ router.post('/:businessId/productos', async (req, res) => {
             precio: parseFloat(precio),
             stock: parseInt(stock),
             imagenUrl: imagenUrl || '',
-            estado: 'ACTIVO'
+            estado: 'ACTIVO' // Por defecto ACTIVO pero no visible en catálogo hasta PUBLICADO
         });
         
         res.status(201).json(result);
@@ -182,6 +183,44 @@ router.put('/:businessId/productos/:codigo', async (req, res) => {
         
         const result = await sheetsService.updateProduct(businessId, codigo, updates);
         res.json(result);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST /api/:businessId/productos/:codigo/publicar - Publicar producto (visible en catálogo)
+router.post('/:businessId/productos/:codigo/publicar', async (req, res) => {
+    try {
+        const { businessId, codigo } = req.params;
+        
+        const result = await sheetsService.updateProduct(businessId, codigo, { 
+            estado: 'PUBLICADO' 
+        });
+        
+        res.json({
+            success: true,
+            message: `Producto ${codigo} publicado en catálogo`,
+            data: result
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST /api/:businessId/productos/:codigo/despublicar - Quitar del catálogo
+router.post('/:businessId/productos/:codigo/despublicar', async (req, res) => {
+    try {
+        const { businessId, codigo } = req.params;
+        
+        const result = await sheetsService.updateProduct(businessId, codigo, { 
+            estado: 'ACTIVO' 
+        });
+        
+        res.json({
+            success: true,
+            message: `Producto ${codigo} removido del catálogo`,
+            data: result
+        });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
@@ -241,18 +280,38 @@ router.get('/:businessId/live/stats', async (req, res) => {
     try {
         const { businessId } = req.params;
         const stats = liveManager.getStats(businessId);
+        const webViewers = catalogSocket.getViewerCount(businessId);
         
         res.json({
             success: true,
             businessId,
-            data: stats
+            data: {
+                ...stats,
+                webViewers
+            }
         });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-// GET /api/:businessId/live/subscribers - Lista de suscritos
+// GET /api/:businessId/live/viewers - Viewers en el catálogo web
+router.get('/:businessId/live/viewers', async (req, res) => {
+    try {
+        const { businessId } = req.params;
+        const count = catalogSocket.getViewerCount(businessId);
+        
+        res.json({
+            success: true,
+            businessId,
+            viewers: count
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// GET /api/:businessId/live/subscribers - Lista de suscritos WhatsApp
 router.get('/:businessId/live/subscribers', async (req, res) => {
     try {
         const { businessId } = req.params;
@@ -269,7 +328,7 @@ router.get('/:businessId/live/subscribers', async (req, res) => {
     }
 });
 
-// POST /api/:businessId/live/broadcast/:codigo - Enviar producto a todos los suscritos
+// POST /api/:businessId/live/broadcast/:codigo - Enviar producto a TODOS (WhatsApp + Web)
 router.post('/:businessId/live/broadcast/:codigo', async (req, res) => {
     try {
         const { businessId, codigo } = req.params;
@@ -284,46 +343,79 @@ router.post('/:businessId/live/broadcast/:codigo', async (req, res) => {
             return res.status(400).json({ success: false, error: 'Producto sin stock disponible' });
         }
         
-        // Obtener suscritos activos
-        const subscribers = liveManager.getSubscribers(businessId);
+        // 1. Enviar a clientes WEB (modal en tiempo real)
+        const webResult = catalogSocket.broadcastProduct(businessId, producto);
         
-        if (subscribers.length === 0) {
-            return res.status(400).json({ 
-                success: false, 
-                error: 'No hay usuarios suscritos al LIVE' 
-            });
-        }
+        // 2. Enviar a suscritos de WhatsApp
+        const subscribers = liveManager.getSubscribers(businessId);
         
         // Publicar producto en el live manager
         liveManager.publishProduct(businessId, producto);
         
-        // Enviar mensaje a cada suscrito
-        let enviados = 0;
-        let errores = 0;
+        let whatsappEnviados = 0;
+        let whatsappErrores = 0;
         
         for (const sub of subscribers) {
             try {
-                // Enviar producto completo en UN SOLO mensaje
                 await whatsappService.sendProductLiveMessage(sub.whatsapp, {
                     ...producto,
                     businessId: businessId
                 });
-                
-                enviados++;
+                whatsappEnviados++;
             } catch (err) {
                 console.error(`Error enviando a ${sub.whatsapp}:`, err.message);
-                errores++;
+                whatsappErrores++;
             }
         }
         
         res.json({
             success: true,
-            message: `Producto enviado a ${enviados} usuarios`,
+            message: `Producto enviado`,
             data: {
                 producto: producto.codigo,
-                subscribersTotal: subscribers.length,
-                enviados,
-                errores
+                nombre: producto.nombre,
+                web: {
+                    viewers: webResult.viewers,
+                    enviado: webResult.success
+                },
+                whatsapp: {
+                    subscribers: subscribers.length,
+                    enviados: whatsappEnviados,
+                    errores: whatsappErrores
+                }
+            }
+        });
+        
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// POST /api/:businessId/live/broadcast-web/:codigo - Enviar SOLO a Web (modal)
+router.post('/:businessId/live/broadcast-web/:codigo', async (req, res) => {
+    try {
+        const { businessId, codigo } = req.params;
+        
+        // Obtener producto
+        const producto = await sheetsService.getProductByCode(businessId, codigo);
+        if (!producto) {
+            return res.status(404).json({ success: false, error: 'Producto no encontrado' });
+        }
+        
+        if (producto.disponible < 1) {
+            return res.status(400).json({ success: false, error: 'Producto sin stock disponible' });
+        }
+        
+        // Enviar solo a clientes WEB
+        const result = catalogSocket.broadcastProduct(businessId, producto);
+        
+        res.json({
+            success: true,
+            message: `Producto mostrado en catálogo web`,
+            data: {
+                producto: producto.codigo,
+                nombre: producto.nombre,
+                viewers: result.viewers
             }
         });
         

@@ -20,7 +20,8 @@
     "axios": "^1.6.2",
     "dotenv": "^16.3.1",
     "express": "^4.18.2",
-    "googleapis": "^129.0.0"
+    "googleapis": "^129.0.0",
+    "socket.io": "^4.7.2"
   },
   "engines": {
     "node": ">=18.0.0"

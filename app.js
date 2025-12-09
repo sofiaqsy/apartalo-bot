@@ -2,10 +2,11 @@
  * APARTALO BOT
  * Bot multi-negocio para ventas por WhatsApp en lives
  * 
- * Version: 1.2.0
+ * Version: 1.4.0 - Con WebSocket para catálogo en tiempo real
  */
 
 const express = require('express');
+const http = require('http');
 const path = require('path');
 const dotenv = require('dotenv');
 
@@ -17,8 +18,13 @@ const stateManager = require('./state-manager');
 const webhookRoute = require('./webhook');
 const adminRoutes = require('./admin-routes');
 const landingApi = require('./landing-api');
+const catalogSocket = require('./catalog-socket');
 
 const app = express();
+const server = http.createServer(app);
+
+// Inicializar Socket.IO
+catalogSocket.initialize(server);
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json({ limit: '10mb' }));
@@ -39,7 +45,7 @@ app.get('/', (req, res) => {
     res.json({
         status: 'active',
         service: 'ApartaLo Bot',
-        version: '1.2.0',
+        version: '1.4.0',
         platform: config.platform.name,
         stats: {
             activeSessions: stats.activeSessions,
@@ -56,7 +62,8 @@ app.get('/', (req, res) => {
             webhook: '/webhook',
             health: '/health',
             api: '/api',
-            admin: '/admin'
+            admin: '/admin',
+            catalog: '/?business=BUSINESS_ID'
         }
     });
 });
@@ -98,7 +105,7 @@ app.use('/api', adminRoutes);
 app.get('/api', (req, res) => {
     res.json({
         name: 'ApartaLo Admin API',
-        version: '1.2.0',
+        version: '1.4.0',
         endpoints: {
             negocios: {
                 'GET /api/negocios': 'Listar todos los negocios',
@@ -111,8 +118,16 @@ app.get('/api', (req, res) => {
                 'POST /api/:businessId/productos': 'Crear producto',
                 'PUT /api/:businessId/productos/:codigo': 'Actualizar producto',
                 'PUT /api/:businessId/productos/:codigo/stock': 'Actualizar stock',
+                'POST /api/:businessId/productos/:codigo/publicar': 'Publicar producto al catálogo',
                 'DELETE /api/:businessId/productos/:codigo': 'Desactivar producto',
                 'POST /api/:businessId/productos/:codigo/liberar': 'Liberar stock reservado'
+            },
+            live: {
+                'GET /api/:businessId/live/stats': 'Estadísticas del LIVE',
+                'GET /api/:businessId/live/subscribers': 'Lista de suscritos WhatsApp',
+                'GET /api/:businessId/live/viewers': 'Viewers en catálogo web',
+                'POST /api/:businessId/live/broadcast/:codigo': 'Enviar producto (WhatsApp + Web)',
+                'POST /api/:businessId/live/broadcast-web/:codigo': 'Enviar solo a Web'
             },
             pedidos: {
                 'GET /api/:businessId/pedidos': 'Listar pedidos (query: estado, fecha, limit)',
@@ -126,6 +141,7 @@ app.get('/api', (req, res) => {
                 'GET /api/:businessId/clientes/:whatsapp': 'Buscar cliente con historial'
             }
         },
+        estados_producto: ['ACTIVO', 'INACTIVO', 'PUBLICADO'],
         estados_pedido: [
             'PENDIENTE_PAGO',
             'PENDIENTE_VALIDACION',
@@ -163,29 +179,31 @@ app.use((req, res) => {
 
 async function initializeApp() {
     try {
-        console.log('\n🚀 Iniciando ApartaLo Bot v1.2...\n');
+        console.log('\n🚀 Iniciando ApartaLo Bot v1.4...\n');
         
         const sheetsReady = await sheetsService.initialize();
         
         const PORT = config.app.port;
         
-        app.listen(PORT, () => {
+        server.listen(PORT, () => {
             console.log(`
 ╔════════════════════════════════════════════════════╗
-║       🛍️  APARTALO BOT v1.2 INICIADO  🛍️          ║
-║          Bot Multi-Negocio para Lives              ║
+║       🛍️  APARTALO BOT v1.4 INICIADO  🛍️          ║
+║     Bot Multi-Negocio + Catálogo en Tiempo Real    ║
 ╠════════════════════════════════════════════════════╣
 ║  📍 Puerto: ${PORT.toString().padEnd(39)}║
 ║  🌐 URL: http://localhost:${PORT.toString().padEnd(23)}║
 ║  📱 Webhook: /webhook                              ║
 ║  🔧 Admin API: /api                                ║
 ║  📊 Admin Panel: /admin                            ║
+║  🛒 Catálogo: /?business=ID                        ║
 ║  💚 Health: /health                                ║
 ║  ⚙️  Modo: ${config.app.isDevelopment ? '🔧 DESARROLLO' : '✅ PRODUCCION'}                        ║
 ╠════════════════════════════════════════════════════╣
 ║  🔌 Servicios:                                     ║
 ║  ${sheetsReady ? '✅' : '❌'} Google Sheets                              ║
 ║  ${config.whatsapp.token ? '✅' : '❌'} WhatsApp Cloud API                        ║
+║  ✅ Socket.IO (Tiempo Real)                        ║
 ╠════════════════════════════════════════════════════╣
 ║  📦 Negocios registrados: ${sheetsService.getBusinesses().length.toString().padEnd(24)}║
 ╚════════════════════════════════════════════════════╝
@@ -234,4 +252,4 @@ process.on('unhandledRejection', (error) => {
 
 initializeApp();
 
-module.exports = app;
+module.exports = { app, server };
