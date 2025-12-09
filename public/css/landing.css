@@ -629,69 +629,6 @@ body {
     box-shadow: none;
 }
 
-/* Success Overlay */
-.success-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.95);
-    display: none;
-    align-items: center;
-    justify-content: center;
-    z-index: 1000;
-}
-
-.success-overlay.show {
-    display: flex;
-}
-
-.success-content {
-    text-align: center;
-    padding: 2rem;
-}
-
-.success-icon {
-    width: 80px;
-    height: 80px;
-    background: var(--primary);
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 2.5rem;
-    color: #000;
-    margin: 0 auto 1.5rem;
-    animation: successPop 0.5s ease;
-}
-
-@keyframes successPop {
-    0% { transform: scale(0); }
-    50% { transform: scale(1.15); }
-    100% { transform: scale(1); }
-}
-
-.success-text {
-    font-size: 1.5rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    color: var(--primary);
-    letter-spacing: -0.3px;
-}
-
-.success-subtext {
-    font-size: 0.938rem;
-    color: var(--text-muted);
-    margin-bottom: 1.5rem;
-}
-
-.countdown-timer {
-    font-size: 2.5rem;
-    font-weight: 700;
-    color: var(--primary);
-}
-
 /* EMPTY STATE */
 .empty-state {
     text-align: center;

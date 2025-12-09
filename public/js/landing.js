@@ -302,81 +302,31 @@ function closeProductModal() {
     currentProduct = null;
 }
 
-// Apartar producto
-async function apartarProducto(index) {
+// WhatsApp de ApartaLo
+const APARTALO_WHATSAPP = '19895335574';
+
+// Apartar producto - Redirige directo a WhatsApp
+function apartarProducto(index) {
     const product = products[index];
     
-    // Encontrar todos los botones de este producto
-    const btns = document.querySelectorAll(`[onclick*="apartarProducto(${index})"]`);
-    btns.forEach(btn => {
-        btn.disabled = true;
-        btn.textContent = 'Procesando...';
-    });
+    // Cerrar modal si está abierto
+    closeProductModal();
     
-    try {
-        const response = await fetch('/api/apartar', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                businessId: currentBusiness,
-                productId: product.id,
-                productoNombre: product.nombre,
-                precio: product.precio
-            })
-        });
-        
-        const data = await response.json();
-        
-        if (data.success) {
-            // Actualizar botones
-            btns.forEach(btn => {
-                btn.classList.add('reserved');
-                btn.textContent = 'APARTADO';
-            });
-            
-            // Cerrar modal si está abierto
-            closeProductModal();
-            
-            // Mostrar overlay de éxito
-            document.getElementById('successOverlay').classList.add('show');
-            
-            // Countdown y redirección
-            let countdown = 3;
-            const timerEl = document.getElementById('countdownTimer');
-            
-            const countdownInterval = setInterval(() => {
-                countdown--;
-                timerEl.textContent = countdown;
-                
-                if (countdown <= 0) {
-                    clearInterval(countdownInterval);
-                    document.getElementById('successOverlay').classList.remove('show');
-                    
-                    if (data.whatsappUrl) {
-                        window.location.href = data.whatsappUrl;
-                    }
-                    
-                    // Actualizar producto en el array
-                    products[index].estado = 'APARTADO';
-                    products[index].disponible = Math.max(0, product.disponible - 1);
-                    renderProducts(products);
-                }
-            }, 1000);
-        } else {
-            btns.forEach(btn => {
-                btn.disabled = false;
-                btn.textContent = 'APARTAR';
-            });
-            showError(data.error || 'Error al apartar producto');
-        }
-    } catch (error) {
-        console.error('Error:', error);
-        btns.forEach(btn => {
-            btn.disabled = false;
-            btn.textContent = 'APARTAR';
-        });
-        showError('Error de conexión');
-    }
+    // Construir mensaje para WhatsApp
+    const mensaje = `APARTADO_WEB
+Negocio: ${currentBusiness}
+NegocioID: ${currentBusiness}
+Producto: ${product.id}
+Nombre: ${product.nombre}
+Precio: S/${parseFloat(product.precio).toFixed(2)}
+
+Quiero apartar este producto`;
+    
+    // Generar URL de WhatsApp
+    const whatsappUrl = `https://wa.me/${APARTALO_WHATSAPP}?text=${encodeURIComponent(mensaje)}`;
+    
+    // Redirigir inmediatamente
+    window.location.href = whatsappUrl;
 }
 
 // Volver al home

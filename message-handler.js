@@ -418,21 +418,13 @@ class MessageHandler {
     
     // ========================================
     // APARTADO DESDE CATÁLOGO WEB
+    // El primero que envía el mensaje gana
     // ========================================
     
     async procesarApartadoWeb(from, mensaje) {
         console.log('Procesando apartado web:', mensaje);
         
         // Parsear datos del mensaje
-        // Formato:
-        // APARTADO_WEB
-        // Negocio: Plantas Vivero
-        // NegocioID: BIZ-001
-        // Producto: PL01
-        // Nombre: Monstera
-        // Precio: S/85.00
-        // PedidoID: PL-123456
-        
         const lines = mensaje.split('\n');
         const datos = {};
         
@@ -445,20 +437,18 @@ class MessageHandler {
             }
         });
         
-        const businessId = datos['negocioid'] || datos['businessid'];
+        const businessId = datos['negocioid'] || datos['businessid'] || datos['negocio'];
         const productId = datos['producto'] || datos['productid'];
         const productoNombre = datos['nombre'];
-        const pedidoId = datos['pedidoid'];
         const precioStr = datos['precio'] || '0';
         const precio = parseFloat(precioStr.replace(/[^0-9.]/g, ''));
-        const negocioNombre = datos['negocio'];
         
-        console.log('Datos parseados:', { businessId, productId, productoNombre, pedidoId, precio, negocioNombre });
+        console.log('Datos parseados:', { businessId, productId, productoNombre, precio });
         
-        if (!businessId) {
+        if (!businessId || !productId) {
             return await whatsappService.sendMessage(from,
                 '¡Hola! Bienvenido a ApartaLo.\n\n' +
-                'Parece que hubo un problema con tu reserva.\n' +
+                'Parece que hubo un problema con tu solicitud.\n' +
                 'Por favor, vuelve al catálogo e intenta nuevamente.'
             );
         }
@@ -477,26 +467,80 @@ class MessageHandler {
             );
         }
         
-        // Guardar el pedido activo en la sesión
-        if (pedidoId) {
-            stateManager.setActivePedido(from, businessId, pedidoId);
+        // Verificar producto y stock
+        const producto = await sheetsService.getProductByCode(businessId, productId);
+        
+        if (!producto) {
+            return await whatsappService.sendMessage(from,
+                '¡Hola! El producto que intentas apartar ya no está disponible.\n\n' +
+                'Vuelve al catálogo para ver productos disponibles.'
+            );
+        }
+        
+        if (producto.disponible <= 0) {
+            return await whatsappService.sendMessage(from,
+                '¡Lo sentimos! Alguien más fue más rápido.\n\n' +
+                '📦 ' + producto.nombre + '\n' +
+                'Ya no tiene stock disponible.\n\n' +
+                'Vuelve al catálogo para ver otros productos.'
+            );
+        }
+        
+        // ¡RESERVAR STOCK! El primero que llega gana
+        const stockResult = await sheetsService.reserveStock(businessId, productId, 1);
+        
+        if (!stockResult.success) {
+            return await whatsappService.sendMessage(from,
+                '¡Lo sentimos! Alguien más fue más rápido.\n\n' +
+                '📦 ' + producto.nombre + '\n' +
+                'Ya fue apartado por otro cliente.\n\n' +
+                'Vuelve al catálogo para ver otros productos.'
+            );
         }
         
         // Verificar si tenemos datos del cliente
         const cliente = await sheetsService.findClient(businessId, from);
         
-        let mensajeRespuesta = '✅ ¡PRODUCTO APARTADO!\n\n';
-        mensajeRespuesta += '🏪 ' + (negocioNombre || negocio.nombre) + '\n\n';
-        mensajeRespuesta += '📦 ' + (productoNombre || 'Producto') + '\n';
-        mensajeRespuesta += '💰 ' + (precioStr.includes('S/') ? precioStr : 'S/' + precio.toFixed(2)) + '\n';
-        if (pedidoId) {
-            mensajeRespuesta += '🆔 Pedido: ' + pedidoId + '\n';
+        // CREAR PEDIDO
+        const pedidoData = {
+            whatsapp: from,
+            cliente: cliente?.nombre || 'Cliente Web',
+            telefono: cliente?.telefono || '',
+            direccion: cliente?.direccion || '',
+            items: [{
+                codigo: productId,
+                nombre: producto.nombre,
+                cantidad: 1,
+                precio: producto.precio
+            }],
+            total: producto.precio,
+            observaciones: 'Apartado desde catálogo web'
+        };
+        
+        const pedidoResult = await sheetsService.createOrder(businessId, pedidoData);
+        
+        if (!pedidoResult.success) {
+            // Liberar stock si falla
+            await sheetsService.releaseStock(businessId, productId, 1);
+            return await whatsappService.sendMessage(from,
+                '❌ Error al procesar tu pedido.\n\n' +
+                'Por favor, intenta nuevamente.'
+            );
         }
-        mensajeRespuesta += '\n';
+        
+        const pedidoId = pedidoResult.pedidoId;
+        stateManager.setActivePedido(from, businessId, pedidoId);
+        
+        // Construir mensaje de éxito
+        let mensajeRespuesta = '✅ ¡LO APARTASTE!\n\n';
+        mensajeRespuesta += '🏪 ' + negocio.nombre + '\n\n';
+        mensajeRespuesta += '📦 ' + producto.nombre + '\n';
+        mensajeRespuesta += '💰 S/' + producto.precio.toFixed(2) + '\n';
+        mensajeRespuesta += '🆔 Pedido: ' + pedidoId + '\n\n';
         mensajeRespuesta += '⏰ Tienes 30 minutos para completar tu compra.\n\n';
         
         if (cliente && cliente.nombre && cliente.direccion) {
-            // Ya tenemos datos del cliente, mostrar resumen y pedir pago
+            // Ya tenemos datos del cliente
             mensajeRespuesta += 'Tus datos de entrega:\n';
             mensajeRespuesta += '👤 ' + cliente.nombre + '\n';
             mensajeRespuesta += '📍 ' + cliente.direccion + '\n';
@@ -513,7 +557,7 @@ class MessageHandler {
                 });
             }
             
-            mensajeRespuesta += 'Envía tu comprobante de pago aquí para confirmar tu pedido.';
+            mensajeRespuesta += 'Envía tu comprobante de pago para confirmar.';
             
             stateManager.setStep(from, 'esperando_voucher', { pedidoId });
             
