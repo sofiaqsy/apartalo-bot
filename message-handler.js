@@ -557,7 +557,7 @@ class MessageHandler {
             stateManager.subscribe(from, negocio.id);
 
             // Mostrar pedidos pendientes si los hay
-            await this.mostrarPedidosPendientes(from, negocio.id);
+
 
             return await this.mostrarMenuNegocio(from, negocio.id);
         }
