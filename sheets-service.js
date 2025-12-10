@@ -732,7 +732,7 @@ class SheetsService {
         try {
             const response = await this.sheets.spreadsheets.values.get({
                 spreadsheetId: business.spreadsheetId,
-                range: 'Clientes!A:G'
+                range: 'Clientes!A:I'
             });
 
             const rows = response.data.values || [];
@@ -750,6 +750,8 @@ class SheetsService {
                     direccion: row[4],
                     fechaRegistro: row[5],
                     ultimaCompra: row[6],
+                    departamento: row[7] || '',
+                    ciudad: row[8] || '',
                     rowIndex: i + 1
                 });
             }
@@ -814,6 +816,19 @@ class SheetsService {
                     values: [[new Date().toLocaleDateString('es-PE')]]
                 });
 
+                if (clientData.departamento) {
+                    updates.push({
+                        range: `Clientes!H${existingClient.rowIndex}`,
+                        values: [[clientData.departamento]]
+                    });
+                }
+                if (clientData.ciudad) {
+                    updates.push({
+                        range: `Clientes!I${existingClient.rowIndex}`,
+                        values: [[clientData.ciudad]]
+                    });
+                }
+
                 if (updates.length > 0) {
                     await this.sheets.spreadsheets.values.batchUpdate({
                         spreadsheetId: business.spreadsheetId,
@@ -837,12 +852,14 @@ class SheetsService {
                     clientData.telefono || '',
                     clientData.direccion || '',
                     fecha,
-                    fecha
+                    fecha,
+                    clientData.departamento || '',
+                    clientData.ciudad || ''
                 ]];
 
                 await this.sheets.spreadsheets.values.append({
                     spreadsheetId: business.spreadsheetId,
-                    range: 'Clientes!A:G',
+                    range: 'Clientes!A:I',
                     valueInputOption: 'USER_ENTERED',
                     resource: { values: valores }
                 });

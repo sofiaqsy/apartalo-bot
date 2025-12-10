@@ -169,57 +169,8 @@ class MessageHandler {
     // LIVE COMMERCE - SUSCRIPCIONES
     // ========================================
 
-    async suscribirAlLive(from, minutos) {
-        const session = stateManager.getSession(from);
-        let businessId = session.businessId;
+    // Live methods removed
 
-        // Si no hay negocio seleccionado, usar el primero disponible
-        if (!businessId) {
-            const negocios = sheetsService.getBusinesses();
-            if (negocios.length > 0) {
-                businessId = negocios[0].id;
-                stateManager.setActiveBusiness(from, businessId);
-            } else {
-                return await whatsappService.sendMessage(from,
-                    'No hay negocios disponibles en este momento.'
-                );
-            }
-        }
-
-        const negocio = sheetsService.getBusiness(businessId);
-        const cliente = await sheetsService.findClient(businessId, from);
-        const nombreUsuario = cliente?.nombre || 'Usuario';
-
-        liveManager.subscribe(businessId, from, nombreUsuario, minutos);
-
-        let mensaje = '🔴 ESTAS EN EL LIVE\n\n';
-        mensaje += negocio.nombre + '\n';
-        mensaje += 'Duracion: ' + minutos + ' minutos\n\n';
-        mensaje += '✨ Recibiras los productos en tiempo real\n';
-        mensaje += '⚡ El primero en tocar "ApartaLo" se lo lleva\n\n';
-        mensaje += 'Escribe "salir" para desconectarte';
-
-        stateManager.setStep(from, 'en_live');
-
-        return await whatsappService.sendMessage(from, mensaje);
-    }
-
-    async salirDelLive(from) {
-        const session = stateManager.getSession(from);
-        const businessId = session.businessId;
-
-        if (businessId) {
-            liveManager.unsubscribe(businessId, from);
-        }
-
-        stateManager.setStep(from, 'esperando_codigo');
-
-        return await whatsappService.sendMessage(from,
-            'Saliste del LIVE.\n\n' +
-            'Puedes seguir comprando escribiendo codigos de productos, ' +
-            'o escribir "live 5" o "live 10" para volver a conectarte.'
-        );
-    }
 
     // ========================================
     // LIVE COMMERCE - BOTONES INTERACTIVOS
@@ -244,6 +195,14 @@ class MessageHandler {
 
         // Botones del menu normal (usar titulo)
         const titleLower = buttonTitle.toLowerCase();
+
+        if (buttonId.startsWith('ver_pedido_')) {
+            const pedidoId = buttonId.replace('ver_pedido_', '');
+            const pedido = await sheetsService.getOrderById(session.businessId, pedidoId);
+            if (pedido) {
+                return await this.mostrarDetallePedido(from, session.businessId, pedido);
+            }
+        }
 
         if (titleLower === 'ver carrito' || titleLower === 'carrito' || titleLower === 'ver pedido') {
             // Ver el pedido activo
@@ -316,13 +275,10 @@ class MessageHandler {
             );
         }
 
-        if (titleLower.includes('live 5')) {
-            return await this.suscribirAlLive(from, 5);
+        if (buttonId === 'ver_pedidos' || titleLower === 'ver mis pedidos') {
+            return await this.mostrarPedidosPendientes(from, session.businessId);
         }
 
-        if (titleLower.includes('live 10')) {
-            return await this.suscribirAlLive(from, 10);
-        }
 
         // ========================================
         // BOTONES DE FLUJO DE ENVÍO
@@ -358,124 +314,8 @@ class MessageHandler {
         );
     }
 
-    async procesarReservaRapida(from, businessId, productCode) {
-        const cliente = await sheetsService.findClient(businessId, from);
-        const nombreUsuario = cliente?.nombre || 'Usuario';
+    // procesarReservaRapida removed
 
-        // Intentar reservar (primero en llegar gana)
-        const resultado = liveManager.tryReserve(businessId, productCode, from, nombreUsuario);
-
-        if (!resultado.success) {
-            // Ya fue reservado por otro usuario
-            return await whatsappService.sendMessage(from,
-                resultado.message + '\n\n' +
-                'Sigue atento al LIVE, vienen mas productos!'
-            );
-        }
-
-        // RESERVADO! Ahora reservar el stock real
-        const stockResult = await sheetsService.reserveStock(businessId, productCode, 1);
-
-        if (!stockResult.success) {
-            // Error de stock, liberar la reserva del live
-            liveManager.clearLiveProduct(businessId, productCode);
-            return await whatsappService.sendMessage(from,
-                'El producto ya no tiene stock disponible.\n\n' +
-                'Sigue atento al LIVE!'
-            );
-        }
-
-        // Limpiar producto del live
-        liveManager.clearLiveProduct(businessId, productCode);
-
-        // Notificar a viewers web que el stock cambió
-        try {
-            const catalogSocket = require('./catalog-socket');
-            catalogSocket.notifyProductReserved(businessId, productCode, stockResult.remainingStock || 0);
-        } catch (e) {
-            console.log('WebSocket notification skipped');
-        }
-
-        // Verificar si ya tiene un pedido activo
-        let pedidoId = stateManager.getActivePedido(from);
-        let esNuevoPedido = false;
-
-        if (!pedidoId) {
-            // CREAR NUEVO PEDIDO con el primer producto
-            esNuevoPedido = true;
-            const pedidoData = {
-                whatsapp: from,
-                cliente: cliente?.nombre || nombreUsuario,
-                telefono: cliente?.telefono || '',
-                direccion: cliente?.direccion || '',
-                items: [{
-                    codigo: resultado.producto.codigo,
-                    nombre: resultado.producto.nombre,
-                    cantidad: 1,
-                    precio: resultado.producto.precio,
-                    subtotal: resultado.producto.precio
-                }],
-                total: resultado.producto.precio
-            };
-
-            const pedidoResult = await sheetsService.createOrder(businessId, pedidoData);
-
-            if (!pedidoResult.success) {
-                // Si falla crear pedido, liberar stock
-                await sheetsService.releaseStock(businessId, productCode, 1);
-                return await whatsappService.sendMessage(from,
-                    '❌ Error al procesar tu reserva. Intenta nuevamente.'
-                );
-            }
-
-            pedidoId = pedidoResult.pedidoId;
-            stateManager.setActivePedido(from, businessId, pedidoId);
-
-        } else {
-            // AGREGAR PRODUCTO al pedido existente
-            const addResult = await sheetsService.addProductToOrder(businessId, pedidoId, {
-                codigo: resultado.producto.codigo,
-                nombre: resultado.producto.nombre,
-                cantidad: 1,
-                precio: resultado.producto.precio
-            });
-
-            if (!addResult.success) {
-                // Si falla agregar, liberar stock
-                await sheetsService.releaseStock(businessId, productCode, 1);
-                return await whatsappService.sendMessage(from,
-                    '❌ Error al agregar el producto. Intenta nuevamente.'
-                );
-            }
-        }
-
-        // Obtener pedido actualizado
-        const pedido = await sheetsService.getOrderById(businessId, pedidoId);
-        const numProductos = pedido.productos.split('|').length;
-
-        let mensaje = '✅ ¡LO APARTASTE!\n\n';
-        mensaje += resultado.producto.nombre + '\n';
-        mensaje += 'S/' + resultado.producto.precio.toFixed(2) + '\n\n';
-
-        if (esNuevoPedido) {
-            mensaje += 'Pedido creado: ' + pedidoId + '\n';
-        } else {
-            mensaje += 'Agregado al pedido: ' + pedidoId + '\n';
-        }
-
-        mensaje += 'Productos en tu pedido: ' + numProductos + '\n';
-        mensaje += 'Total: S/' + pedido.total.toFixed(2) + '\n\n';
-        mensaje += 'Tienes 30 minutos para pagar\n\n';
-        mensaje += '¿Que deseas hacer?';
-
-        stateManager.setStep(from, 'esperando_codigo');
-
-        return await whatsappService.sendButtonMessage(from, mensaje, [
-            { title: 'Seguir en LIVE', id: 'seguir' },
-            { title: 'Pagar ahora', id: 'pagar' },
-            { title: 'Ver pedido', id: 'ver_pedido' }
-        ]);
-    }
 
     // ========================================
     // APARTADO DESDE CATÁLOGO WEB
@@ -711,7 +551,7 @@ class MessageHandler {
             // Mostrar pedidos pendientes si los hay
             await this.mostrarPedidosPendientes(from, negocio.id);
 
-            return await this.mostrarMenuNegocioConLive(from, negocio.id);
+            return await this.mostrarMenuNegocio(from, negocio.id);
         }
 
         stateManager.setStep(from, 'seleccionar_negocio');
@@ -772,12 +612,12 @@ class MessageHandler {
         // Mostrar pedidos pendientes si los hay
         await this.mostrarPedidosPendientes(from, negocioSeleccionado.id);
 
-        return await this.mostrarMenuNegocioConLive(from, negocioSeleccionado.id);
+        return await this.mostrarMenuNegocio(from, negocioSeleccionado.id);
     }
 
     // MENU DEL NEGOCIO CON OPCION LIVE
 
-    async mostrarMenuNegocioConLive(from, businessId) {
+    async mostrarMenuNegocio(from, businessId) {
         const negocio = sheetsService.getBusiness(businessId);
         if (!negocio) {
             return await this.mostrarBienvenida(from);
@@ -785,42 +625,45 @@ class MessageHandler {
 
         const cart = stateManager.getCart(from, businessId);
         const cartTotal = stateManager.getCartTotal(from, businessId);
-        const isSubscribed = liveManager.isSubscribed(businessId, from);
-        const subscriberCount = liveManager.getSubscriberCount(businessId);
 
+        // Verificar pedidos activos
         let mensaje = negocio.nombre + '\n\n';
-
-        if (isSubscribed) {
-            mensaje += 'Estas conectado al LIVE\n';
-            mensaje += subscriberCount + ' personas conectadas\n\n';
-        }
+        const pedidos = await sheetsService.getOrdersByClient(businessId, from);
+        const pedidosActivos = pedidos.filter(p =>
+            p.estado !== 'ENTREGADO' && p.estado !== 'CANCELADO'
+        );
 
         if (cart.length > 0) {
-            mensaje += 'Tienes ' + cart.length + ' producto(s) en tu carrito\n';
-            mensaje += 'Total: S/' + cartTotal.toFixed(2) + '\n\n';
+            mensaje += '🛒 CARRITO: ' + cart.length + ' producto(s) - S/' + cartTotal.toFixed(2) + '\n\n';
         }
 
-        mensaje += 'Hay un LIVE activo?\n';
-        mensaje += 'Suscribete para recibir productos en tiempo real!\n\n';
-        mensaje += 'Elige cuanto tiempo quieres estar conectado:';
+        if (pedidosActivos.length > 0) {
+            mensaje += '📦 Tienes ' + pedidosActivos.length + ' pedido(s) en curso.\n\n';
+        }
+
+        mensaje += 'Selecciona una opción:';
 
         stateManager.setStep(from, 'menu_negocio');
 
-        const botones = [
-            { title: 'LIVE 5 min', id: 'live5' },
-            { title: 'LIVE 10 min', id: 'live10' }
-        ];
+        const botones = [];
+
+        if (pedidosActivos.length > 0) {
+            botones.push({ title: 'Ver mis pedidos', id: 'ver_pedidos' });
+        }
 
         if (cart.length > 0) {
+            botones.push({ title: 'Ir a pagar', id: 'pagar' });
             botones.push({ title: 'Ver carrito', id: 'carrito' });
+        } else {
+            // Si no hay carrito ni pedidos, ofrecer ir al catalogo web?
+            // Como es bot, quizas solo mantener sesion abierta
         }
+
+        botones.push({ title: 'Cambiar negocio', id: 'cambiar_negocio' });
 
         return await whatsappService.sendButtonMessage(from, mensaje, botones);
     }
 
-    async mostrarMenuNegocio(from, businessId) {
-        return await this.mostrarMenuNegocioConLive(from, businessId);
-    }
 
     // MOSTRAR PEDIDOS PENDIENTES
 
@@ -833,7 +676,10 @@ class MessageHandler {
                 p.estado !== 'ENTREGADO' && p.estado !== 'CANCELADO'
             );
 
-            if (pedidosActivos.length === 0) return;
+            // Si solo hay un pedido, mostrar detalle directamente
+            if (pedidosActivos.length === 1) {
+                return await this.mostrarDetallePedido(from, businessId, pedidosActivos[0]);
+            }
 
             let mensaje = '📦 TUS PEDIDOS ACTIVOS:\n\n';
 
@@ -844,27 +690,20 @@ class MessageHandler {
                 mensaje += `   Fecha: ${pedido.fecha}\n\n`;
             });
 
-            mensaje += 'Escribe el codigo del pedido para ver detalles.';
+            // Si hay pocos pedidos, mostrar botones
+            if (pedidosActivos.length <= 3) {
+                mensaje += 'Selecciona un pedido para ver detalle:';
 
-            // Si hay pedidos pendientes de pago, agregar botón
-            const pedidosPendientesPago = pedidosActivos.filter(p => p.estado === 'PENDIENTE_PAGO');
+                const botones = pedidosActivos.map(p => ({
+                    title: `Ver ${p.id}`,
+                    id: `ver_pedido_${p.id}`
+                }));
 
-            if (pedidosPendientesPago.length > 0) {
-                // Si hay solo un pedido pendiente, botón directo
-                if (pedidosPendientesPago.length === 1) {
-                    const pedido = pedidosPendientesPago[0];
-                    stateManager.setStep(from, 'esperando_voucher', { pedidoId: pedido.id });
-
-                    return await whatsappService.sendButtonMessage(from, mensaje, [
-                        { title: 'Enviar comprobante', id: 'enviar_voucher' }
-                    ]);
-                } else {
-                    // Si hay múltiples, pedir que escriba el código
-                    return await whatsappService.sendMessage(from, mensaje);
-                }
-            } else {
-                await whatsappService.sendMessage(from, mensaje);
+                return await whatsappService.sendButtonMessage(from, mensaje, botones);
             }
+
+            mensaje += 'Escribe el codigo del pedido para ver detalles.';
+            return await whatsappService.sendMessage(from, mensaje);
         } catch (error) {
             console.error('Error mostrando pedidos:', error);
         }
@@ -1573,10 +1412,20 @@ class MessageHandler {
         const pedidoId = sessionData.pedidoId;
         const departamentoCliente = sessionData.departamentoCliente; // Get customer's department from session
 
+        // Guardar datos del cliente (ciudad/departamento)
+        if (sessionData.ciudadCliente || departamentoCliente) {
+            await sheetsService.saveClient(businessId, {
+                whatsapp: from,
+                departamento: departamentoCliente,
+                ciudad: sessionData.ciudadCliente
+            });
+        }
+
         if (opcionId === 'envio_local') {
             // Envío local - Finalizar
             const costoEnvio = parseFloat(config.envio_local_costo || 0);
             const departamento = config.departamento || 'Lima'; // Business's department
+
 
             await sheetsService.updateOrderShipping(businessId, pedidoId, {
                 departamento_cliente: departamentoCliente,
