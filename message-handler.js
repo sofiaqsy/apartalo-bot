@@ -236,10 +236,18 @@ class MessageHandler {
             );
         }
 
+        if (buttonId.startsWith('enviar_voucher_')) {
+            const pedidoId = buttonId.replace('enviar_voucher_', '');
+            stateManager.setStep(from, 'esperando_voucher', { pedidoId });
+            return await whatsappService.sendMessage(from,
+                '📸 Perfecto!\n\nEnvia la foto o captura de tu comprobante de pago para el pedido ' + pedidoId
+            );
+        }
+
         if (titleLower === 'enviar comprobante' || titleLower === 'enviar voucher') {
+            // Fallback for generic button
             const pedidoId = stateManager.getActivePedido(from);
             if (!pedidoId && session.businessId) {
-                // Buscar el último pedido pendiente de pago
                 const pedidos = await sheetsService.getOrdersByClient(session.businessId, from);
                 const pedidoPendiente = pedidos.find(p => p.estado === 'PENDIENTE_PAGO');
                 if (pedidoPendiente) {
@@ -626,37 +634,43 @@ class MessageHandler {
         const cart = stateManager.getCart(from, businessId);
         const cartTotal = stateManager.getCartTotal(from, businessId);
 
-        // Verificar pedidos activos
-        let mensaje = negocio.nombre + '\n\n';
+
         const pedidos = await sheetsService.getOrdersByClient(businessId, from);
         const pedidosActivos = pedidos.filter(p =>
             p.estado !== 'ENTREGADO' && p.estado !== 'CANCELADO'
         );
 
+        // Si hay pedidos activos, mostrarlos TODOS directamente
+        if (pedidosActivos.length > 0) {
+            for (const pedido of pedidosActivos) {
+                await this.mostrarDetallePedido(from, businessId, pedido);
+            }
+            // Si hay carrito, mostrar también recordatorio
+            if (cart.length > 0) {
+                const mensajeCarrito = '🛒 Tambien tienes un carrito pendiente con ' + cart.length + ' producto(s).\n' +
+                    'Escribe "carrito" para verlo.';
+                await whatsappService.sendMessage(from, mensajeCarrito);
+            }
+            return;
+        }
+
+        // Si no hay pedidos, mostrar menú normal
+        let mensaje = negocio.nombre + '\n\n';
+
         if (cart.length > 0) {
             mensaje += '🛒 CARRITO: ' + cart.length + ' producto(s) - S/' + cartTotal.toFixed(2) + '\n\n';
         }
 
-        if (pedidosActivos.length > 0) {
-            mensaje += '📦 Tienes ' + pedidosActivos.length + ' pedido(s) en curso.\n\n';
-        }
-
+        mensaje += 'No tienes pedidos activos.\n';
         mensaje += 'Selecciona una opción:';
 
         stateManager.setStep(from, 'menu_negocio');
 
         const botones = [];
 
-        if (pedidosActivos.length > 0) {
-            botones.push({ title: 'Ver mis pedidos', id: 'ver_pedidos' });
-        }
-
         if (cart.length > 0) {
             botones.push({ title: 'Ir a pagar', id: 'pagar' });
             botones.push({ title: 'Ver carrito', id: 'carrito' });
-        } else {
-            // Si no hay carrito ni pedidos, ofrecer ir al catalogo web?
-            // Como es bot, quizas solo mantener sesion abierta
         }
 
         botones.push({ title: 'Cambiar negocio', id: 'cambiar_negocio' });
@@ -725,7 +739,8 @@ class MessageHandler {
     async mostrarDetallePedido(from, businessId, pedido) {
         const negocio = sheetsService.getBusiness(businessId);
 
-        let mensaje = '📦 DETALLE DEL PEDIDO\n\n';
+        let mensaje = '📦 DETALLE DEL PEDIDO\n';
+        mensaje += (negocio.nombre || '') + '\n\n';
         mensaje += 'Codigo: ' + pedido.id + '\n';
         mensaje += 'Estado: ' + this.formatearEstado(pedido.estado) + '\n';
         mensaje += 'Fecha: ' + pedido.fecha + ' ' + pedido.hora + '\n\n';
@@ -767,20 +782,19 @@ class MessageHandler {
 
             mensaje += '⏰ Tienes 30 minutos para completar el pago';
 
-            stateManager.setStep(from, 'esperando_voucher', { pedidoId: pedido.id });
+            // NO SETTING STEP HERE to allow multiple order views without race conditions
+            // stateManager.setStep(from, 'esperando_voucher', { pedidoId: pedido.id });
 
-            // Botón para enviar comprobante
+            // Botón para enviar comprobante ESPECIFICO
             return await whatsappService.sendButtonMessage(from, mensaje, [
-                { title: 'Enviar comprobante', id: 'enviar_voucher' }
+                { title: 'Enviar comprobante', id: `enviar_voucher_${pedido.id}` }
             ]);
 
         } else if (pedido.estado === 'PENDIENTE_VALIDACION') {
             mensaje += '⏳ Tu voucher esta siendo validado. Te notificaremos pronto.';
 
-            stateManager.setStep(from, 'esperando_voucher', { pedidoId: pedido.id });
-
             return await whatsappService.sendButtonMessage(from, mensaje, [
-                { title: 'Enviar comprobante', id: 'enviar_voucher' }
+                { title: 'Enviar comprobante', id: `enviar_voucher_${pedido.id}` }
             ]);
         } else {
             mensaje += 'Gracias por tu compra! 🎉';
