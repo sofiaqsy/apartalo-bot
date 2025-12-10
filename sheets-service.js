@@ -1186,59 +1186,90 @@ class SheetsService {
     /**
      * Actualizar preferencias de envío del cliente
      */
+    /**
+     * Actualizar preferencias de envío del cliente
+     */
     async updateClientShippingPreferences(businessId, whatsapp, shippingData) {
         const business = this.getBusiness(businessId);
-        if (!business) return false;
+        if (!business || !business.spreadsheetId) return false;
 
         try {
-            // Buscar cliente para obtener su fila
-            const existingClient = await this.findClient(businessId, whatsapp);
+            // Obtener datos actuales de clientes
+            const response = await this.sheets.spreadsheets.values.get({
+                spreadsheetId: business.spreadsheetId,
+                range: 'Clientes!A:Z'
+            });
 
-            if (!existingClient) {
-                console.log('Cliente no encontrado para actualizar preferencias');
+            const rows = response.data.values || [];
+            if (rows.length < 1) return false;
+
+            const headers = rows[0];
+
+            // Encontrar o crear columnas de envío
+            let ciudadCol = headers.findIndex(h => h.toLowerCase() === 'ciudad');
+            let deptoCol = headers.findIndex(h => h.toLowerCase() === 'departamento');
+            let tipoEnvioCol = headers.findIndex(h => h.toLowerCase() === 'tipo_envio_preferido');
+            let empresaCol = headers.findIndex(h => h.toLowerCase() === 'empresa_envio_preferida');
+            let sedeCol = headers.findIndex(h => h.toLowerCase() === 'sede_envio_preferida');
+            let sedeDireccionCol = headers.findIndex(h => h.toLowerCase() === 'sede_direccion_preferida');
+
+            // Buscar fila del cliente por WhatsApp
+            const whatsappCol = headers.findIndex(h => h.toLowerCase() === 'whatsapp');
+            let clienteRow = -1;
+
+            for (let i = 1; i < rows.length; i++) {
+                if (rows[i][whatsappCol] === whatsapp) {
+                    clienteRow = i + 1; // Sheets es 1-indexed
+                    break;
+                }
+            }
+
+            if (clienteRow === -1) {
+                console.log(`Cliente ${whatsapp} no encontrado para guardar preferencias`);
                 return false;
             }
 
+            // Preparar actualizaciones
             const updates = [];
-            const rowIndex = existingClient.rowIndex;
 
-            // Map keys to columns (Assuming A=1, so J=10, K=11, etc.)
-            // H=Department, I=City
-            // J=Tipo Envío, K=Empresa, L=Sede, M=Dirección Sede
-
-            if (shippingData.departamento) {
+            if (ciudadCol !== -1 && shippingData.ciudad) {
                 updates.push({
-                    range: `Clientes!H${rowIndex}`,
-                    values: [[shippingData.departamento]]
-                });
-            }
-            if (shippingData.ciudad) {
-                updates.push({
-                    range: `Clientes!I${rowIndex}`,
+                    range: `Clientes!${this.helperColumnToLetter(ciudadCol + 1)}${clienteRow}`,
                     values: [[shippingData.ciudad]]
                 });
             }
-            if (shippingData.tipoEnvio) {
+
+            if (deptoCol !== -1 && shippingData.departamento) {
                 updates.push({
-                    range: `Clientes!J${rowIndex}`,
+                    range: `Clientes!${this.helperColumnToLetter(deptoCol + 1)}${clienteRow}`,
+                    values: [[shippingData.departamento]]
+                });
+            }
+
+            if (tipoEnvioCol !== -1 && shippingData.tipoEnvio) {
+                updates.push({
+                    range: `Clientes!${this.helperColumnToLetter(tipoEnvioCol + 1)}${clienteRow}`,
                     values: [[shippingData.tipoEnvio]]
                 });
             }
-            if (shippingData.empresa !== undefined) {
+
+            if (empresaCol !== -1) {
                 updates.push({
-                    range: `Clientes!K${rowIndex}`,
+                    range: `Clientes!${this.helperColumnToLetter(empresaCol + 1)}${clienteRow}`,
                     values: [[shippingData.empresa || '']]
                 });
             }
-            if (shippingData.sede !== undefined) {
+
+            if (sedeCol !== -1) {
                 updates.push({
-                    range: `Clientes!L${rowIndex}`,
+                    range: `Clientes!${this.helperColumnToLetter(sedeCol + 1)}${clienteRow}`,
                     values: [[shippingData.sede || '']]
                 });
             }
-            if (shippingData.sedeDireccion !== undefined) {
+
+            if (sedeDireccionCol !== -1) {
                 updates.push({
-                    range: `Clientes!M${rowIndex}`,
+                    range: `Clientes!${this.helperColumnToLetter(sedeDireccionCol + 1)}${clienteRow}`,
                     values: [[shippingData.sedeDireccion || '']]
                 });
             }
@@ -1247,17 +1278,17 @@ class SheetsService {
                 await this.sheets.spreadsheets.values.batchUpdate({
                     spreadsheetId: business.spreadsheetId,
                     resource: {
-                        data: updates,
-                        valueInputOption: 'USER_ENTERED'
+                        valueInputOption: 'RAW',
+                        data: updates
                     }
                 });
+                console.log(`✅ Preferencias de envío guardadas para ${whatsapp}`);
             }
 
-            console.log(`✅ Preferencias de envío actualizadas para ${whatsapp}`);
             return true;
 
         } catch (error) {
-            console.error('❌ Error actualizando preferencias de envío:', error.message);
+            console.error('Error guardando preferencias de envío:', error.message);
             return false;
         }
     }
@@ -1267,34 +1298,51 @@ class SheetsService {
      */
     async getClientShippingPreferences(businessId, whatsapp) {
         const business = this.getBusiness(businessId);
-        if (!business) return null;
+        if (!business || !business.spreadsheetId) return null;
 
         try {
-            // Leer rango extendido para incluir preferencias
+            // Leer rango completo para headers y datos
             const response = await this.sheets.spreadsheets.values.get({
                 spreadsheetId: business.spreadsheetId,
-                range: 'Clientes!A:M'
+                range: 'Clientes!A:Z'
             });
 
             const rows = response.data.values || [];
-            // Buscar cliente
+            if (rows.length < 2) return null;
+
+            const headers = rows[0];
+            const whatsappCol = headers.findIndex(h => h.toLowerCase() === 'whatsapp');
+
+            // Indices de preferencias
+            const ciudadCol = headers.findIndex(h => h.toLowerCase() === 'ciudad');
+            const deptoCol = headers.findIndex(h => h.toLowerCase() === 'departamento');
+            const tipoEnvioCol = headers.findIndex(h => h.toLowerCase() === 'tipo_envio_preferido');
+            const empresaCol = headers.findIndex(h => h.toLowerCase() === 'empresa_envio_preferida');
+            const sedeCol = headers.findIndex(h => h.toLowerCase() === 'sede_envio_preferida');
+            const sedeDireccionCol = headers.findIndex(h => h.toLowerCase() === 'sede_direccion_preferida');
+
+            // Find client row
             for (let i = 1; i < rows.length; i++) {
-                const row = rows[i];
-                if (row[1] === whatsapp) { // Col B is Whatsapp
-                    // Si tiene tipo de envío preferido (Col J index 9)
-                    if (row[9]) {
+                if (rows[i][whatsappCol] === whatsapp) {
+                    const row = rows[i];
+
+                    // Verificar si tiene tipo de envío guardado
+                    const tipoEnvio = tipoEnvioCol !== -1 ? row[tipoEnvioCol] : null;
+
+                    if (tipoEnvio) {
                         return {
-                            ciudad: row[8] || '', // I
-                            departamento: row[7] || '', // H
-                            tipoEnvio: row[9], // J
-                            empresa: row[10] || '', // K
-                            sede: row[11] || '', // L
-                            sedeDireccion: row[12] || '' // M
+                            ciudad: ciudadCol !== -1 ? row[ciudadCol] : '',
+                            departamento: deptoCol !== -1 ? row[deptoCol] : '',
+                            tipoEnvio: tipoEnvio,
+                            empresa: empresaCol !== -1 ? row[empresaCol] : '',
+                            sede: sedeCol !== -1 ? row[sedeCol] : '',
+                            sedeDireccion: sedeDireccionCol !== -1 ? row[sedeDireccionCol] : ''
                         };
                     }
                 }
             }
             return null;
+
         } catch (error) {
             console.error('Error obteniendo preferencias:', error.message);
             return null;
