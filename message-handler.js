@@ -81,19 +81,6 @@ class MessageHandler {
             return await this.mostrarMenuNegocio(from, session.businessId);
         }
 
-        // COMANDOS DE LIVE
-        if (mensajeLower === 'live 5' || mensajeLower === 'live5' || mensajeLower === 'live 5 min') {
-            return await this.suscribirAlLive(from, 5);
-        }
-
-        if (mensajeLower === 'live 10' || mensajeLower === 'live10' || mensajeLower === 'live 10 min') {
-            return await this.suscribirAlLive(from, 10);
-        }
-
-        if (mensajeLower === 'salir live' || mensajeLower === 'salir') {
-            return await this.salirDelLive(from);
-        }
-
         // FLUJO PRINCIPAL
         switch (session.step) {
             case 'inicio':
@@ -134,6 +121,16 @@ class MessageHandler {
             // Flujo de envío post-pago
             case 'preguntar_ciudad':
                 return await this.procesarCiudad(from, mensaje);
+
+            case 'seleccionar_sede':
+                // Si el mensaje es numérico, procesar selección
+                if (/^\d+$/.test(mensaje)) {
+                    return await this.procesarSeleccionSede(from, mensaje);
+                }
+                // Si no, sugerir usar botones o número
+                return await whatsappService.sendMessage(from,
+                    'Por favor, selecciona una sede válida de la lista respondiendo con el número.'
+                );
 
             case 'seleccionar_envio':
                 // Se maneja en handleInteractive, pero si escribe texto
@@ -1510,106 +1507,124 @@ class MessageHandler {
 
     async procesarSeleccionEmpresa(from, empresaId) {
         const empresa = empresaId.replace('empresa_', '').replace(/_/g, ' ');
-        const empresaNombre = empresa.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+        const empresaNombre = empresa.charAt(0).toUpperCase() + empresa.slice(1);
 
-        const session = stateManager.getSession(from);
-        const sessionData = session.data || {};
-        // (Dato 'empresaEnvio' se guardará al cambiar de paso)
+        const sessionData = stateManager.getData(from);
+        stateManager.setData(from, 'empresaEnvio', empresaNombre);
 
-        // Obtener sedes de la empresa
-        const sedes = await sheetsService.getSedesEmpresa(empresaNombre);
+        // Obtener departamento del cliente desde la sesión
+        const departamentoCliente = sessionData.departamentoCliente;
 
-        if (sedes.length === 0) {
-            // Sin sedes encontradas, finalizar con empresa genérica
-            const config = await sheetsService.getBusinessConfig(session.businessId);
-            const pedidoId = sessionData.pedidoId;
-            const costoNacional = parseFloat(config.envio_nacional_costo || 0);
-
-            await sheetsService.updateOrderShipping(session.businessId, pedidoId, {
-                departamento_cliente: sessionData.departamentoCliente,
-                ciudad_cliente: sessionData.ciudadCliente,
-                tipo_envio: 'NACIONAL',
-                metodo_envio: empresaNombre,
-                empresa_envio: empresaNombre,
-                costo_envio: costoNacional
-            });
-
-            return await this.enviarConfirmacionFinal(from, config, {
-                tipo: 'NACIONAL',
-                metodo: empresaNombre,
-                empresa: empresaNombre,
-                sede: 'Por confirmar'
-            });
+        if (!departamentoCliente) {
+            await whatsappService.sendMessage(from,
+                'Hubo un error. Por favor indica nuevamente tu ciudad.'
+            );
+            stateManager.setStep(from, 'preguntar_ciudad', sessionData);
+            return;
         }
 
-        stateManager.setStep(from, 'seleccionar_sede', {
-            ...sessionData,
-            empresaEnvio: empresaNombre
-        });
+        // Obtener sedes de la empresa EN EL DEPARTAMENTO DEL CLIENTE
+        const sedes = await sheetsService.getSedesEmpresa(empresaNombre, departamentoCliente);
 
-        // Usar botones si hay 3 o menos sedes
+        if (sedes.length === 0) {
+            // No hay sedes en ese departamento
+            await whatsappService.sendMessage(from,
+                `${empresaNombre} no tiene sedes en ${departamentoCliente}.\n` +
+                'Por favor selecciona otra empresa de envío.'
+            );
+
+            // Volver a mostrar empresas
+            const businessId = stateManager.getActiveBusiness(from);
+            const config = await sheetsService.getBusinessConfig(businessId);
+            const empresasHabilitadas = (config.empresas_envio || 'Shalom,Olva').split(',').map(e => e.trim());
+
+            stateManager.setStep(from, 'seleccionar_empresa', sessionData);
+
+            const botones = empresasHabilitadas.slice(0, 3).map(emp => ({
+                id: `empresa_${emp.toLowerCase()}`,
+                title: emp
+            }));
+
+            return await whatsappService.sendButtonMessage(from,
+                '¿Con qué empresa de courier prefieres?',
+                botones
+            );
+        }
+
+        stateManager.setStep(from, 'seleccionar_sede', sessionData);
+
+        // Mostrar sedes del departamento del cliente
         if (sedes.length <= 3) {
+            // Usar botones
             const botones = sedes.map(sede => ({
                 id: `sede_${sede.sede.toLowerCase().replace(/\s+/g, '_')}`,
                 title: sede.sede
             }));
 
-            return await whatsappService.sendButtonMessage(from,
-                `¿En qué agencia de ${empresaNombre} recogerás tu pedido?`,
+            await whatsappService.sendButtonMessage(from,
+                `Sedes de ${empresaNombre} en ${departamentoCliente}:\n\n` +
+                `¿En cuál recogerás tu pedido?`,
                 botones
             );
         } else {
-            // Mostrar lista de texto si hay más de 3
-            let mensaje = `Sedes de ${empresaNombre} disponibles:\n\n`;
-            sedes.forEach((sede, i) => {
-                mensaje += `${i + 1}. ${sede.sede}\n`;
+            // Más de 3 sedes - mostrar lista numerada
+            let mensaje = `Sedes de ${empresaNombre} en ${departamentoCliente}:\n\n`;
+
+            sedes.forEach((sede, index) => {
+                mensaje += `${index + 1}. ${sede.sede}\n`;
                 mensaje += `   ${sede.direccion}, ${sede.distrito}\n\n`;
             });
+
             mensaje += 'Responde con el número de la sede.';
 
-            return await whatsappService.sendMessage(from, mensaje);
+            // Guardar sedes en sesión para procesar respuesta numérica
+            stateManager.setData(from, 'sedesDisponibles', sedes);
+
+            await whatsappService.sendMessage(from, mensaje);
         }
     }
 
-    async procesarSeleccionSede(from, sedeId) {
-        const sedeCodigo = sedeId.replace('sede_', '').replace(/_/g, ' ');
-
-        const session = stateManager.getSession(from);
-        const sessionData = session.data || {};
-        const businessId = session.businessId;
+    async procesarSeleccionSede(from, respuesta) {
+        const sessionData = stateManager.getData(from);
+        const businessId = stateManager.getActiveBusiness(from);
         const config = await sheetsService.getBusinessConfig(businessId);
         const pedidoId = sessionData.pedidoId;
         const empresaNombre = sessionData.empresaEnvio;
+        const departamentoCliente = sessionData.departamentoCliente;
 
-        // Obtener datos de la sede
-        const sedes = await sheetsService.getSedesEmpresa(empresaNombre);
-        let sedeSeleccionada = sedes.find(s =>
-            s.sede.toLowerCase() === sedeCodigo.toLowerCase()
-        );
+        let sedeSeleccionada = null;
 
-        // Si viene como número, buscar por índice
-        if (!sedeSeleccionada && !isNaN(sedeCodigo)) {
-            const idx = parseInt(sedeCodigo) - 1;
-            if (idx >= 0 && idx < sedes.length) {
-                sedeSeleccionada = sedes[idx];
+        // Verificar si es respuesta numérica o ID de botón
+        if (/^\d+$/.test(respuesta)) {
+            // Respuesta numérica
+            const sedesDisponibles = sessionData.sedesDisponibles;
+            const indice = parseInt(respuesta) - 1;
+
+            if (!sedesDisponibles || indice < 0 || indice >= sedesDisponibles.length) {
+                return await whatsappService.sendMessage(from,
+                    'Número no válido. Por favor selecciona un número de la lista.'
+                );
             }
-        }
 
-        if (!sedeSeleccionada && sedes.length > 0) {
-            sedeSeleccionada = sedes[0]; // Default a primera sede
+            sedeSeleccionada = sedesDisponibles[indice];
+
+        } else {
+            // Respuesta de botón (sede_lima_centro)
+            const sedeCodigo = respuesta.replace('sede_', '').replace(/_/g, ' ');
+
+            const sedes = await sheetsService.getSedesEmpresa(empresaNombre, departamentoCliente);
+            sedeSeleccionada = sedes.find(s =>
+                s.sede.toLowerCase() === sedeCodigo.toLowerCase()
+            );
         }
 
         if (!sedeSeleccionada) {
             return await whatsappService.sendMessage(from,
-                'Sede no encontrada. Te contactaremos para confirmar la agencia.'
+                'Sede no encontrada. Por favor intenta de nuevo.'
             );
         }
 
-        // Actualizar pedido
-        // Costo nacional
-        const costoNacional = parseFloat(config.envio_nacional_costo || 0);
-
-        // Actualizar pedido
+        // Actualizar pedido con datos de envío
         await sheetsService.updateOrderShipping(businessId, pedidoId, {
             departamento_cliente: sessionData.departamentoCliente,
             ciudad_cliente: sessionData.ciudadCliente,
@@ -1618,18 +1633,33 @@ class MessageHandler {
             empresa_envio: empresaNombre,
             sede_envio: sedeSeleccionada.sede,
             sede_direccion: `${sedeSeleccionada.direccion}, ${sedeSeleccionada.distrito}`,
-            costo_envio: costoNacional
+            sede_departamento: sedeSeleccionada.departamento,
+            sede_telefono: sedeSeleccionada.telefono || '',
+            costo_envio: parseFloat(config.envio_nacional_costo || 0)
         });
 
         // Enviar confirmación final
-        return await this.enviarConfirmacionFinal(from, config, {
-            tipo: 'NACIONAL',
-            metodo: `${empresaNombre} - ${sedeSeleccionada.sede}`,
-            empresa: empresaNombre,
-            sede: sedeSeleccionada.sede,
-            direccion: `${sedeSeleccionada.direccion}, ${sedeSeleccionada.distrito}`,
-            telefono: sedeSeleccionada.telefono
-        });
+        let mensaje = '✅ ¡Pedido confirmado!\n\n';
+        mensaje += `Código: ${pedidoId}\n\n`;
+        mensaje += `Tu pedido será enviado a:\n`;
+        mensaje += `${empresaNombre} - ${sedeSeleccionada.sede}\n`;
+        mensaje += `${sedeSeleccionada.direccion}, ${sedeSeleccionada.distrito}\n`;
+        mensaje += `${sedeSeleccionada.departamento}\n`;
+
+        if (sedeSeleccionada.telefono) {
+            mensaje += `Tel: ${sedeSeleccionada.telefono}\n`;
+        }
+
+        mensaje += '\nTe enviaremos el código de rastreo cuando despachemos tu pedido.';
+
+        if (config && config.telefono_contacto) {
+            mensaje += `\n\n¿Consultas? ${config.telefono_contacto}`;
+        }
+
+        await whatsappService.sendMessage(from, mensaje);
+
+        // Limpiar estado
+        stateManager.clearState(from);
     }
 
     async enviarConfirmacionFinal(from, config, envioData) {

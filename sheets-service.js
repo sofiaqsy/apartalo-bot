@@ -1072,14 +1072,37 @@ class SheetsService {
      * @param {string} empresa - Nombre de la empresa
      * @returns {Array} - Lista de sedes en Lima
      */
-    async getSedesEmpresa(empresa) {
+    /**
+     * Obtener sedes de una empresa en un departamento específico
+     * @param {string} empresa - Nombre de la empresa (Shalom, Olva, etc)
+     * @param {string} departamento - Departamento del cliente (Cusco, Arequipa, Lima, etc)
+     */
+    async getSedesEmpresa(empresa, departamento) {
         const todasEmpresas = await this.getEmpresasEnvio();
 
-        // Filtrar por empresa y solo sedes en Lima (donde el negocio despacha)
-        return todasEmpresas.filter(e =>
-            e.empresa.toLowerCase() === empresa.toLowerCase() &&
-            e.departamento === 'Lima'
-        );
+        // Normalizar para comparación
+        const empresaLower = empresa.toLowerCase().trim();
+        let deptoLower = '';
+        if (departamento) {
+            deptoLower = departamento.toLowerCase().trim()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, ''); // Quitar tildes
+        }
+
+        // Filtrar por empresa Y departamento del cliente
+        const sedes = todasEmpresas.filter(e => {
+            const eEmpresa = e.empresa.toLowerCase().trim();
+            const eDepto = e.departamento.toLowerCase().trim()
+                .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+            // Si no se especifica depto (ej. admin), mostrar todo de esa empresa
+            if (!departamento) return eEmpresa === empresaLower;
+
+            return eEmpresa === empresaLower && eDepto === deptoLower;
+        });
+
+        console.log(`Sedes de ${empresa} en ${departamento}:`, sedes.length);
+
+        return sedes;
     }
 
     /**
