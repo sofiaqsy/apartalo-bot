@@ -599,6 +599,9 @@ class MessageHandler {
             const pedidoId = pedidoResult.pedidoId;
             stateManager.setActivePedido(from, businessId, pedidoId);
 
+            // Obtener configuración del negocio para métodos de pago
+            const config = await sheetsService.getBusinessConfig(businessId);
+
             // Construir mensaje de éxito
             let mensajeRespuesta = '¡LO APARTASTE!\n\n';
             mensajeRespuesta += negocio.nombre + '\n\n';
@@ -609,8 +612,15 @@ class MessageHandler {
             mensajeRespuesta += cliente.nombre + '\n';
             mensajeRespuesta += cliente.direccion + '\n\n';
 
-            // Mostrar datos de pago del negocio
-            if (negocio.cuentasBancarias) {
+            // Métodos de pago desde configuración del negocio
+            if (config) {
+                const textoMetodosPago = sheetsService.construirTextoMetodosPago(config);
+                if (textoMetodosPago) {
+                    mensajeRespuesta += textoMetodosPago + '\n\n';
+                }
+            } else if (negocio.cuentasBancarias) {
+                // Fallback al campo legacy si no hay config
+                mensajeRespuesta += '━━━━━━━━━━━━━━━━━━━━\n';
                 mensajeRespuesta += 'CUENTAS PARA PAGAR:\n\n';
                 const cuentas = negocio.cuentasBancarias.split('|');
                 cuentas.forEach(cuenta => {
@@ -620,12 +630,26 @@ class MessageHandler {
                         mensajeRespuesta += numero + '\n\n';
                     }
                 });
+                mensajeRespuesta += '━━━━━━━━━━━━━━━━━━━━\n\n';
             }
 
             mensajeRespuesta += 'Tienes 30 minutos para completar el pago.\n';
             mensajeRespuesta += 'Envía tu comprobante de pago a este chat.';
 
-            stateManager.setStep(from, 'esperando_voucher', { pedidoId });
+            // Teléfono de contacto
+            if (config && config.telefono_contacto) {
+                mensajeRespuesta += '\n\n¿Consultas? Escribe al ' + config.telefono_contacto;
+            }
+
+            stateManager.setStep(from, 'esperando_voucher', {
+                pedidoId,
+                productoApartado: {
+                    codigo: productId,
+                    nombre: producto.nombre,
+                    precio: producto.precio
+                },
+                direccion: cliente.direccion
+            });
 
             return await whatsappService.sendButtonMessage(from, mensajeRespuesta, [
                 { title: 'Enviar comprobante', id: 'enviar_voucher' },
@@ -1234,16 +1258,28 @@ class MessageHandler {
             const pedidoId = pedidoResult.pedidoId;
             stateManager.setActivePedido(from, businessId, pedidoId);
 
-            // Construir mensaje con todos los datos
-            let mensaje = '¡Pedido creado!\n\n';
-            mensaje += 'Código: ' + pedidoId + '\n\n';
-            mensaje += 'Productos:\n';
-            mensaje += productoApartado.nombre + ' x' + (productoApartado.cantidad || 1) + '\n\n';
-            mensaje += 'Total: S/' + pedidoData.total.toFixed(2) + '\n\n';
-            mensaje += 'Entrega en:\n' + direccion + '\n\n';
+            // Obtener configuración del negocio para métodos de pago
+            const config = await sheetsService.getBusinessConfig(businessId);
 
-            // Cuentas bancarias
-            if (negocio && negocio.cuentasBancarias) {
+            // Construir mensaje con todos los datos
+            let mensaje = '¡LO APARTASTE!\n\n';
+            mensaje += (negocio?.nombre || 'Tu pedido') + '\n\n';
+            mensaje += productoApartado.nombre + '\n';
+            mensaje += 'S/' + productoApartado.precio.toFixed(2) + '\n';
+            mensaje += 'Pedido: ' + pedidoId + '\n\n';
+            mensaje += 'Datos de entrega:\n';
+            mensaje += nombre + '\n';
+            mensaje += direccion + '\n\n';
+
+            // Métodos de pago desde configuración del negocio
+            if (config) {
+                const textoMetodosPago = sheetsService.construirTextoMetodosPago(config);
+                if (textoMetodosPago) {
+                    mensaje += textoMetodosPago + '\n\n';
+                }
+            } else if (negocio && negocio.cuentasBancarias) {
+                // Fallback al campo legacy si no hay config
+                mensaje += '━━━━━━━━━━━━━━━━━━━━\n';
                 mensaje += 'CUENTAS PARA PAGAR:\n\n';
                 const cuentas = negocio.cuentasBancarias.split('|');
                 cuentas.forEach(cuenta => {
@@ -1252,13 +1288,22 @@ class MessageHandler {
                         mensaje += banco + '\n' + numero + '\n\n';
                     }
                 });
+                mensaje += '━━━━━━━━━━━━━━━━━━━━\n\n';
             }
 
-            mensaje += 'Para confirmar tu pedido:\n';
-            mensaje += 'Envía el voucher de tu pago a este chat.\n\n';
-            mensaje += 'Tienes 30 minutos para completar el pago.';
+            mensaje += 'Tienes 30 minutos para completar el pago.\n';
+            mensaje += 'Envía tu comprobante de pago a este chat.';
 
-            stateManager.setStep(from, 'esperando_voucher', { pedidoId });
+            // Teléfono de contacto
+            if (config && config.telefono_contacto) {
+                mensaje += '\n\n¿Consultas? Escribe al ' + config.telefono_contacto;
+            }
+
+            stateManager.setStep(from, 'esperando_voucher', {
+                pedidoId,
+                productoApartado,
+                direccion
+            });
 
             return await whatsappService.sendButtonMessage(from, mensaje, [
                 { title: 'Enviar comprobante', id: 'enviar_voucher' },

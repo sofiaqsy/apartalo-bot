@@ -865,7 +865,11 @@ class SheetsService {
 
         const metodos = [];
 
-        if (config.yape_activo === 'SI' && config.yape_numero) {
+        // Helper para verificar SI/NO
+        const isActivo = (valor) => valor?.toUpperCase() === 'SI';
+
+        // Yape
+        if (isActivo(config.yape_activo) && config.yape_numero) {
             metodos.push({
                 tipo: 'yape',
                 nombre: 'Yape',
@@ -874,7 +878,8 @@ class SheetsService {
             });
         }
 
-        if (config.plin_activo === 'SI' && config.plin_numero) {
+        // Plin
+        if (isActivo(config.plin_activo) && config.plin_numero) {
             metodos.push({
                 tipo: 'plin',
                 nombre: 'Plin',
@@ -883,9 +888,10 @@ class SheetsService {
             });
         }
 
-        if (config.bcp_activo === 'SI' && config.bcp_cuenta) {
+        // BCP
+        if (isActivo(config.bcp_activo) && config.bcp_cuenta) {
             metodos.push({
-                tipo: 'bcp',
+                tipo: 'banco',
                 nombre: 'BCP',
                 cuenta: config.bcp_cuenta,
                 cci: config.bcp_cci || '',
@@ -893,9 +899,10 @@ class SheetsService {
             });
         }
 
-        if (config.interbank_activo === 'SI' && config.interbank_cuenta) {
+        // Interbank
+        if (isActivo(config.interbank_activo) && config.interbank_cuenta) {
             metodos.push({
-                tipo: 'interbank',
+                tipo: 'banco',
                 nombre: 'Interbank',
                 cuenta: config.interbank_cuenta,
                 cci: config.interbank_cci || '',
@@ -903,7 +910,68 @@ class SheetsService {
             });
         }
 
+        // BBVA
+        if (isActivo(config.bbva_activo) && config.bbva_cuenta) {
+            metodos.push({
+                tipo: 'banco',
+                nombre: 'BBVA',
+                cuenta: config.bbva_cuenta,
+                cci: config.bbva_cci || '',
+                titular: config.bbva_titular || ''
+            });
+        }
+
+        // Scotiabank
+        if (isActivo(config.scotiabank_activo) && config.scotiabank_cuenta) {
+            metodos.push({
+                tipo: 'banco',
+                nombre: 'Scotiabank',
+                cuenta: config.scotiabank_cuenta,
+                cci: config.scotiabank_cci || '',
+                titular: config.scotiabank_titular || ''
+            });
+        }
+
         return metodos;
+    }
+
+    /**
+     * Construir texto de métodos de pago para mensaje de WhatsApp
+     * @param {Object} config - Configuración del negocio
+     * @returns {string} - Texto formateado con métodos de pago
+     */
+    construirTextoMetodosPago(config) {
+        const metodos = this.getMetodosPago(config);
+
+        if (metodos.length === 0) {
+            return '';
+        }
+
+        let texto = '━━━━━━━━━━━━━━━━━━━━\n';
+        texto += 'MÉTODOS DE PAGO:\n\n';
+
+        for (const metodo of metodos) {
+            if (metodo.tipo === 'yape' || metodo.tipo === 'plin') {
+                texto += `${metodo.nombre}: ${metodo.numero}\n`;
+                if (metodo.titular) {
+                    texto += `${metodo.titular}\n`;
+                }
+                texto += '\n';
+            } else if (metodo.tipo === 'banco') {
+                texto += `${metodo.nombre}: ${metodo.cuenta}\n`;
+                if (metodo.cci) {
+                    texto += `CCI: ${metodo.cci}\n`;
+                }
+                if (metodo.titular) {
+                    texto += `${metodo.titular}\n`;
+                }
+                texto += '\n';
+            }
+        }
+
+        texto += '━━━━━━━━━━━━━━━━━━━━';
+
+        return texto;
     }
 
     // ========================================
