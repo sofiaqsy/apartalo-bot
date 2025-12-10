@@ -437,7 +437,13 @@ class SheetsService {
                 orderData.total || 0,
                 'PENDIENTE_PAGO',
                 '',
-                orderData.observaciones || ''
+                orderData.observaciones || '',
+                '', // Departamento
+                '', // Ciudad
+                '', // Tipo Envio
+                '', // Metodo Envio
+                '', // Detalle Envio
+                ''  // Costo Envio
             ]];
 
             await this.sheets.spreadsheets.values.append({
@@ -463,7 +469,7 @@ class SheetsService {
         try {
             const response = await this.sheets.spreadsheets.values.get({
                 spreadsheetId: business.spreadsheetId,
-                range: 'Pedidos!A:L'
+                range: 'Pedidos!A:R'
             });
 
             const rows = response.data.values || [];
@@ -481,11 +487,18 @@ class SheetsService {
                     cliente: row[4],
                     telefono: row[5],
                     direccion: row[6],
-                    productos: row[7],
-                    total: parseFloat(row[8]) || 0,
-                    estado: row[9] || 'PENDIENTE_PAGO',
+                    items: this.parseItems(row[7]),
+                    total: parseFloat(row[8] || 0),
+                    estado: row[9],
                     voucherUrl: row[10],
                     observaciones: row[11],
+                    // Nuevas columnas de envío
+                    departamento: row[12] || '',
+                    ciudad: row[13] || '',
+                    tipoEnvio: row[14] || '',
+                    metodoEnvio: row[15] || '',
+                    detalleEnvio: row[16] || '',
+                    costoEnvio: parseFloat(row[17] || 0),
                     rowIndex: i + 1
                 });
             }
@@ -1043,18 +1056,44 @@ class SheetsService {
                 return { success: false, error: 'Pedido no encontrado' };
             }
 
-            // Por ahora guardar en observaciones mientras no existan las columnas extra
-            // Formato: ENVIO|tipo|metodo|empresa|sede|costo
-            const envioStr = `ENVIO|${shippingData.tipo_envio || ''}|${shippingData.metodo_envio || ''}|${shippingData.empresa_envio || ''}|${shippingData.sede_envio || ''}|${shippingData.costo_envio || 0}`;
+            // Mapeo detallado de datos
+            const departamento = shippingData.departamento_cliente || '';
+            const ciudad = shippingData.ciudad_cliente || '';
+            const tipo = shippingData.tipo_envio || '';
 
-            const obsActual = pedido.observaciones || '';
-            const nuevaObs = obsActual ? `${obsActual} | ${envioStr}` : envioStr;
+            // Método/Empresa (Col P)
+            let metodoEmpresa = shippingData.metodo_envio || '';
+            if (tipo === 'NACIONAL' && shippingData.empresa_envio) {
+                metodoEmpresa = shippingData.empresa_envio;
+            }
+
+            // Detalle/Sede (Col Q)
+            let detalleSede = '';
+            if (tipo === 'NACIONAL') {
+                detalleSede = shippingData.sede_envio ? `${shippingData.sede_envio} - ${shippingData.sede_direccion || ''}` : '';
+            } else if (tipo === 'RECOJO') {
+                detalleSede = 'Tienda'; // O la dirección de la tienda si estuviera disponible
+            } else {
+                // Para local, la dirección ya está en el pedido principal, pero podemos poner notas
+                detalleSede = shippingData.detalle || '';
+            }
+
+            const costo = shippingData.costo_envio || 0;
+
+            const valoresUpdate = [[
+                departamento,
+                ciudad,
+                tipo,
+                metodoEmpresa,
+                detalleSede,
+                costo
+            ]];
 
             await this.sheets.spreadsheets.values.update({
                 spreadsheetId: business.spreadsheetId,
-                range: `Pedidos!L${pedido.rowIndex}`,
+                range: `Pedidos!M${pedido.rowIndex}:R${pedido.rowIndex}`,
                 valueInputOption: 'USER_ENTERED',
-                resource: { values: [[nuevaObs]] }
+                resource: { values: valoresUpdate }
             });
 
             console.log(`✅ Envío actualizado para pedido ${pedidoId}: ${shippingData.tipo_envio}`);

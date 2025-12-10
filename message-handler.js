@@ -1499,9 +1499,7 @@ class MessageHandler {
             );
         }
 
-        // Guardar datos
-        stateManager.setData(from, 'departamentoCliente', departamentoCliente);
-        stateManager.setData(from, 'ciudadCliente', ciudad);
+        // (Datos se guardarán al cambiar de paso)
 
         // Determinar si es local o nacional
         const departamentoNegocio = config.departamento || 'Lima';
@@ -1573,16 +1571,20 @@ class MessageHandler {
         const businessId = session.businessId;
         const config = await sheetsService.getBusinessConfig(businessId);
         const pedidoId = sessionData.pedidoId;
+        const departamentoCliente = sessionData.departamentoCliente; // Get customer's department from session
 
         if (opcionId === 'envio_local') {
             // Envío local - Finalizar
-            const costoEnvio = parseFloat(config.envio_local_costo) || 0;
-            const departamento = config.departamento || 'Lima';
+            const costoEnvio = parseFloat(config.envio_local_costo || 0);
+            const departamento = config.departamento || 'Lima'; // Business's department
 
             await sheetsService.updateOrderShipping(businessId, pedidoId, {
+                departamento_cliente: departamentoCliente,
+                ciudad_cliente: sessionData.ciudadCliente,
                 tipo_envio: 'LOCAL',
                 metodo_envio: `Delivery ${departamento}`,
-                costo_envio: costoEnvio
+                costo_envio: costoEnvio,
+                detalle: sessionData.direccion // Dirección del cliente para el pedido
             });
 
             return await this.enviarConfirmacionFinal(from, config, {
@@ -1595,6 +1597,8 @@ class MessageHandler {
         } else if (opcionId === 'recojo_tienda') {
             // Recojo en tienda - Finalizar
             await sheetsService.updateOrderShipping(businessId, pedidoId, {
+                departamento_cliente: departamentoCliente,
+                ciudad_cliente: sessionData.ciudadCliente,
                 tipo_envio: 'RECOJO',
                 metodo_envio: 'Recojo en tienda',
                 costo_envio: 0
@@ -1635,7 +1639,7 @@ class MessageHandler {
 
         const session = stateManager.getSession(from);
         const sessionData = session.data || {};
-        stateManager.setData(from, 'empresaEnvio', empresaNombre);
+        // (Dato 'empresaEnvio' se guardará al cambiar de paso)
 
         // Obtener sedes de la empresa
         const sedes = await sheetsService.getSedesEmpresa(empresaNombre);
@@ -1644,11 +1648,15 @@ class MessageHandler {
             // Sin sedes encontradas, finalizar con empresa genérica
             const config = await sheetsService.getBusinessConfig(session.businessId);
             const pedidoId = sessionData.pedidoId;
+            const costoNacional = parseFloat(config.envio_nacional_costo || 0);
 
             await sheetsService.updateOrderShipping(session.businessId, pedidoId, {
+                departamento_cliente: sessionData.departamentoCliente,
+                ciudad_cliente: sessionData.ciudadCliente,
                 tipo_envio: 'NACIONAL',
                 metodo_envio: empresaNombre,
-                empresa_envio: empresaNombre
+                empresa_envio: empresaNombre,
+                costo_envio: costoNacional
             });
 
             return await this.enviarConfirmacionFinal(from, config, {
@@ -1723,11 +1731,19 @@ class MessageHandler {
         }
 
         // Actualizar pedido
+        // Costo nacional
+        const costoNacional = parseFloat(config.envio_nacional_costo || 0);
+
+        // Actualizar pedido
         await sheetsService.updateOrderShipping(businessId, pedidoId, {
+            departamento_cliente: sessionData.departamentoCliente,
+            ciudad_cliente: sessionData.ciudadCliente,
             tipo_envio: 'NACIONAL',
             metodo_envio: `${empresaNombre} - ${sedeSeleccionada.sede}`,
             empresa_envio: empresaNombre,
-            sede_envio: sedeSeleccionada.sede
+            sede_envio: sedeSeleccionada.sede,
+            sede_direccion: `${sedeSeleccionada.direccion}, ${sedeSeleccionada.distrito}`,
+            costo_envio: costoNacional
         });
 
         // Enviar confirmación final
