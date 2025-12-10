@@ -8,6 +8,7 @@ const sheetsService = require('./sheets-service');
 const whatsappService = require('./whatsapp-service');
 const liveManager = require('./live-manager');
 const config = require('./config');
+const { construirLinkWhatsAppConsulta } = require('./utils/whatsapp-utils');
 
 class MessageHandler {
     constructor() {
@@ -620,7 +621,6 @@ class MessageHandler {
                 }
             } else if (negocio.cuentasBancarias) {
                 // Fallback al campo legacy si no hay config
-                mensajeRespuesta += '━━━━━━━━━━━━━━━━━━━━\n';
                 mensajeRespuesta += 'CUENTAS PARA PAGAR:\n\n';
                 const cuentas = negocio.cuentasBancarias.split('|');
                 cuentas.forEach(cuenta => {
@@ -630,15 +630,21 @@ class MessageHandler {
                         mensajeRespuesta += numero + '\n\n';
                     }
                 });
-                mensajeRespuesta += '━━━━━━━━━━━━━━━━━━━━\n\n';
             }
 
             mensajeRespuesta += 'Tienes 30 minutos para completar el pago.\n';
             mensajeRespuesta += 'Envía tu comprobante de pago a este chat.';
 
-            // Teléfono de contacto
-            if (config && config.telefono_contacto) {
-                mensajeRespuesta += '\n\n¿Consultas? Escribe al ' + config.telefono_contacto;
+            // Link de WhatsApp con resumen del pedido
+            if (config && (config.whatsapp_negocio || config.telefono_contacto)) {
+                const telefonoNegocio = config.whatsapp_negocio || config.telefono_contacto;
+                const linkConsulta = construirLinkWhatsAppConsulta(telefonoNegocio, {
+                    pedidoId: pedidoId,
+                    productoNombre: producto.nombre,
+                    precio: producto.precio,
+                    cliente: cliente.nombre
+                });
+                mensajeRespuesta += '\n\n¿Consultas? Escribe aquí:\n' + linkConsulta;
             }
 
             stateManager.setStep(from, 'esperando_voucher', {
@@ -1279,7 +1285,6 @@ class MessageHandler {
                 }
             } else if (negocio && negocio.cuentasBancarias) {
                 // Fallback al campo legacy si no hay config
-                mensaje += '━━━━━━━━━━━━━━━━━━━━\n';
                 mensaje += 'CUENTAS PARA PAGAR:\n\n';
                 const cuentas = negocio.cuentasBancarias.split('|');
                 cuentas.forEach(cuenta => {
@@ -1288,15 +1293,21 @@ class MessageHandler {
                         mensaje += banco + '\n' + numero + '\n\n';
                     }
                 });
-                mensaje += '━━━━━━━━━━━━━━━━━━━━\n\n';
             }
 
             mensaje += 'Tienes 30 minutos para completar el pago.\n';
             mensaje += 'Envía tu comprobante de pago a este chat.';
 
-            // Teléfono de contacto
-            if (config && config.telefono_contacto) {
-                mensaje += '\n\n¿Consultas? Escribe al ' + config.telefono_contacto;
+            // Link de WhatsApp con resumen del pedido
+            if (config && (config.whatsapp_negocio || config.telefono_contacto)) {
+                const telefonoNegocio = config.whatsapp_negocio || config.telefono_contacto;
+                const linkConsulta = construirLinkWhatsAppConsulta(telefonoNegocio, {
+                    pedidoId: pedidoId,
+                    productoNombre: productoApartado.nombre,
+                    precio: productoApartado.precio,
+                    cliente: nombre
+                });
+                mensaje += '\n\n¿Consultas? Escribe aquí:\n' + linkConsulta;
             }
 
             stateManager.setStep(from, 'esperando_voucher', {
@@ -1766,8 +1777,21 @@ class MessageHandler {
 
         mensaje += '\n━━━━━━━━━━━━━━━━━━━━\n';
 
-        if (config && config.telefono_contacto) {
-            mensaje += `¿Consultas? Escribe al ${config.telefono_contacto}`;
+        if (config && (config.whatsapp_negocio || config.telefono_contacto)) {
+            const telefonoConsulta = config.whatsapp_negocio || config.telefono_contacto;
+
+            // Datos para el link de consulta
+            const datosPedido = {
+                pedidoId: sessionData.pedidoId,
+                productoNombre: sessionData.productoApartado ? sessionData.productoApartado.nombre : 'mi pedido',
+                precio: sessionData.productoApartado ? sessionData.productoApartado.precio : 0,
+                cliente: sessionData.nombre || 'Cliente'
+            };
+
+            const linkConsulta = construirLinkWhatsAppConsulta(telefonoConsulta, datosPedido);
+
+            mensaje += '¿Consultas sobre tu pedido? 🤔\n';
+            mensaje += `👉 ${linkConsulta}`;
         } else {
             mensaje += '¡Gracias por tu compra! 🎉';
         }

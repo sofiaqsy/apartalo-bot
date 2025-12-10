@@ -936,7 +936,7 @@ class SheetsService {
     }
 
     /**
-     * Construir texto de métodos de pago para mensaje de WhatsApp
+     * Construir texto de métodos de pago para mensaje de WhatsApp (sin líneas divisoras)
      * @param {Object} config - Configuración del negocio
      * @returns {string} - Texto formateado con métodos de pago
      */
@@ -947,8 +947,7 @@ class SheetsService {
             return '';
         }
 
-        let texto = '━━━━━━━━━━━━━━━━━━━━\n';
-        texto += 'MÉTODOS DE PAGO:\n\n';
+        let texto = 'MÉTODOS DE PAGO:\n\n';
 
         for (const metodo of metodos) {
             if (metodo.tipo === 'yape' || metodo.tipo === 'plin') {
@@ -969,9 +968,7 @@ class SheetsService {
             }
         }
 
-        texto += '━━━━━━━━━━━━━━━━━━━━';
-
-        return texto;
+        return texto.trim();
     }
 
     // ========================================
