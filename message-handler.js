@@ -694,7 +694,7 @@ class MessageHandler {
             if (pedidosActivos.length <= 3) {
                 mensaje += 'Selecciona un pedido para ver detalle:';
 
-                const botones = pedidosActivos.map(p => ({
+                const botones = pedidosActivos.slice(0, 3).map(p => ({
                     title: `Ver ${p.id}`,
                     id: `ver_pedido_${p.id}`
                 }));
