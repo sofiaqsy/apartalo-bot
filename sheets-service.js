@@ -462,6 +462,31 @@ class SheetsService {
         }
     }
 
+    parseItems(itemsStr) {
+        if (!itemsStr) return [];
+
+        try {
+            return itemsStr.split('|').map(itemStr => {
+                const parts = itemStr.split(':');
+                if (parts.length < 4) return null;
+
+                const cantidad = parseInt(parts[2]) || 0;
+                const precio = parseFloat(parts[3]) || 0;
+
+                return {
+                    codigo: parts[0],
+                    nombre: parts[1],
+                    cantidad: cantidad,
+                    precio: precio,
+                    subtotal: cantidad * precio
+                };
+            }).filter(item => item !== null);
+        } catch (e) {
+            console.error('Error parsing items:', e);
+            return [];
+        }
+    }
+
     async getAllOrders(businessId) {
         const business = this.getBusiness(businessId);
         if (!business) return [];
