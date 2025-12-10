@@ -731,11 +731,18 @@ class MessageHandler {
         mensaje += 'Fecha: ' + pedido.fecha + ' ' + pedido.hora + '\n\n';
 
         mensaje += 'Productos:\n';
-        const items = pedido.productos.split('|');
-        items.forEach(item => {
-            const [codigo, nombre, cantidad, precio] = item.split(':');
-            mensaje += '- ' + cantidad + 'x ' + nombre + ' - S/' + (parseFloat(cantidad) * parseFloat(precio)).toFixed(2) + '\n';
-        });
+        if (Array.isArray(pedido.items)) {
+            pedido.items.forEach(item => {
+                mensaje += '- ' + item.cantidad + 'x ' + item.nombre + ' - S/' + item.subtotal.toFixed(2) + '\n';
+            });
+        } else if (typeof pedido.items === 'string') {
+            // Fallback for legacy format if any
+            const items = pedido.items.split('|');
+            items.forEach(item => {
+                const [codigo, nombre, cantidad, precio] = item.split(':');
+                mensaje += '- ' + cantidad + 'x ' + nombre + ' - S/' + (parseFloat(cantidad) * parseFloat(precio)).toFixed(2) + '\n';
+            });
+        }
 
         mensaje += '\nTotal: S/' + pedido.total.toFixed(2) + '\n\n';
 
