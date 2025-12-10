@@ -1169,6 +1169,199 @@ class SheetsService {
             return { success: false, error: error.message };
         }
     }
+    // ==========================================
+    // PREFERENCIAS DE ENVÍO Y PAGO
+    // ==========================================
+
+    helperColumnToLetter(column) {
+        let temp, letter = '';
+        while (column > 0) {
+            temp = (column - 1) % 26;
+            letter = String.fromCharCode(temp + 65) + letter;
+            column = (column - temp - 1) / 26;
+        }
+        return letter;
+    }
+
+    /**
+     * Actualizar preferencias de envío del cliente
+     */
+    async updateClientShippingPreferences(businessId, whatsapp, shippingData) {
+        const business = this.getBusiness(businessId);
+        if (!business) return false;
+
+        try {
+            // Buscar cliente para obtener su fila
+            const existingClient = await this.findClient(businessId, whatsapp);
+
+            if (!existingClient) {
+                console.log('Cliente no encontrado para actualizar preferencias');
+                return false;
+            }
+
+            const updates = [];
+            const rowIndex = existingClient.rowIndex;
+
+            // Map keys to columns (Assuming A=1, so J=10, K=11, etc.)
+            // H=Department, I=City
+            // J=Tipo Envío, K=Empresa, L=Sede, M=Dirección Sede
+
+            if (shippingData.departamento) {
+                updates.push({
+                    range: `Clientes!H${rowIndex}`,
+                    values: [[shippingData.departamento]]
+                });
+            }
+            if (shippingData.ciudad) {
+                updates.push({
+                    range: `Clientes!I${rowIndex}`,
+                    values: [[shippingData.ciudad]]
+                });
+            }
+            if (shippingData.tipoEnvio) {
+                updates.push({
+                    range: `Clientes!J${rowIndex}`,
+                    values: [[shippingData.tipoEnvio]]
+                });
+            }
+            if (shippingData.empresa !== undefined) {
+                updates.push({
+                    range: `Clientes!K${rowIndex}`,
+                    values: [[shippingData.empresa || '']]
+                });
+            }
+            if (shippingData.sede !== undefined) {
+                updates.push({
+                    range: `Clientes!L${rowIndex}`,
+                    values: [[shippingData.sede || '']]
+                });
+            }
+            if (shippingData.sedeDireccion !== undefined) {
+                updates.push({
+                    range: `Clientes!M${rowIndex}`,
+                    values: [[shippingData.sedeDireccion || '']]
+                });
+            }
+
+            if (updates.length > 0) {
+                await this.sheets.spreadsheets.values.batchUpdate({
+                    spreadsheetId: business.spreadsheetId,
+                    resource: {
+                        data: updates,
+                        valueInputOption: 'USER_ENTERED'
+                    }
+                });
+            }
+
+            console.log(`✅ Preferencias de envío actualizadas para ${whatsapp}`);
+            return true;
+
+        } catch (error) {
+            console.error('❌ Error actualizando preferencias de envío:', error.message);
+            return false;
+        }
+    }
+
+    /**
+     * Obtener preferencias de envío del cliente
+     */
+    async getClientShippingPreferences(businessId, whatsapp) {
+        const business = this.getBusiness(businessId);
+        if (!business) return null;
+
+        try {
+            // Leer rango extendido para incluir preferencias
+            const response = await this.sheets.spreadsheets.values.get({
+                spreadsheetId: business.spreadsheetId,
+                range: 'Clientes!A:M'
+            });
+
+            const rows = response.data.values || [];
+            // Buscar cliente
+            for (let i = 1; i < rows.length; i++) {
+                const row = rows[i];
+                if (row[1] === whatsapp) { // Col B is Whatsapp
+                    // Si tiene tipo de envío preferido (Col J index 9)
+                    if (row[9]) {
+                        return {
+                            ciudad: row[8] || '', // I
+                            departamento: row[7] || '', // H
+                            tipoEnvio: row[9], // J
+                            empresa: row[10] || '', // K
+                            sede: row[11] || '', // L
+                            sedeDireccion: row[12] || '' // M
+                        };
+                    }
+                }
+            }
+            return null;
+        } catch (error) {
+            console.error('Error obteniendo preferencias:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Obtener el último pedido del cliente
+     */
+    async getLastOrder(businessId, whatsapp) {
+        const business = this.getBusiness(businessId);
+        if (!business) return null;
+
+        try {
+            const response = await this.sheets.spreadsheets.values.get({
+                spreadsheetId: business.spreadsheetId,
+                range: 'Pedidos!A:S'
+            });
+
+            const rows = response.data.values || [];
+            if (rows.length < 2) return null;
+
+            // Headers row 0. Find Whatsapp col (Col B usually? let's assume standard layout or find by name)
+            // Layout assumption from other methods: A=ID, B=WA
+
+            // Iterate backwards to find last order
+            for (let i = rows.length - 1; i >= 1; i--) {
+                const row = rows[i];
+                if (row[1] === whatsapp) { // Col B is WhatsApp
+                    return await this.parseOrder(row, i + 1);
+                }
+            }
+            return null;
+        } catch (error) {
+            console.error('Error obteniendo último pedido:', error.message);
+            return null;
+        }
+    }
+
+    /**
+     * Parsear métodos de pago
+     */
+    getMetodosPago(config) {
+        const metodos = [];
+        if (!config || !config.cuentasBancarias) return metodos;
+
+        const cuentas = config.cuentasBancarias.split('|');
+        cuentas.forEach(cuenta => {
+            // Formato esperado: "Banco:Numero" o "Yape:Numero"
+            // Pero mejor si es más flexible. Asumimos texto simple por ahora
+            const parts = cuenta.split(':');
+            if (parts.length >= 2) {
+                const tipo = parts[0].trim().toLowerCase();
+                const isWallet = tipo.includes('yape') || tipo.includes('plin');
+
+                metodos.push({
+                    tipo: isWallet ? 'yape' : 'banco',
+                    nombre: parts[0].trim(),
+                    numero: parts[1].trim(), // Para wallets
+                    cuenta: parts[1].trim(), // Para bancos
+                    titular: '', // No tenemos titular separado en el formato actual simple
+                    cci: ''
+                });
+            }
+        });
+        return metodos;
+    }
 }
 
 module.exports = new SheetsService();

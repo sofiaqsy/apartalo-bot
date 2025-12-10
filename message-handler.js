@@ -304,6 +304,15 @@ class MessageHandler {
             return await this.procesarSeleccionSede(from, buttonId);
         }
 
+        // Confirmar datos de envío guardados
+        if (buttonId === 'confirmar_envio_si') {
+            return await this.confirmarEnvioGuardado(from);
+        }
+
+        if (buttonId === 'confirmar_envio_no') {
+            return await this.cambiarDatosEnvio(from);
+        }
+
         // Seleccion de negocio por nombre
         const negocios = sheetsService.getBusinesses();
         const negocioMatch = negocios.find(n =>
@@ -763,10 +772,23 @@ class MessageHandler {
         }
 
         if (pedido.estado === 'PENDIENTE_PAGO') {
-            mensaje += '💳 CUENTAS PARA PAGAR:\n\n';
+            mensaje += '💳 MÉTODOS DE PAGO:\n\n';
 
-            // Mostrar cuentas bancarias del negocio
-            if (negocio.cuentasBancarias) {
+            // Mostrar métodos de pago desde sheetsService helper
+            const metodos = sheetsService.getMetodosPago(config);
+
+            if (metodos.length > 0) {
+                for (const metodo of metodos) {
+                    if (metodo.tipo === 'yape' || metodo.tipo === 'banco') {
+                        // Generalized display
+                        mensaje += `${metodo.nombre}: ${metodo.numero || metodo.cuenta}\n`;
+                        if (metodo.cci) mensaje += `CCI: ${metodo.cci}\n`;
+                        if (metodo.titular) mensaje += `${metodo.titular}\n`;
+                        mensaje += '\n';
+                    }
+                }
+            } else if (negocio.cuentasBancarias) {
+                // Fallback to legacy parsing if helper returns empty or just in case
                 const cuentas = negocio.cuentasBancarias.split('|');
                 cuentas.forEach(cuenta => {
                     const [banco, numero] = cuenta.split(':');
@@ -777,6 +799,7 @@ class MessageHandler {
                 mensaje += 'Contacta al vendedor para datos de pago\n\n';
             }
 
+            mensaje += 'Envía tu comprobante de pago a este chat.\n';
             mensaje += '⏰ Tienes 30 minutos para completar el pago';
 
             // NO SETTING STEP HERE to allow multiple order views without race conditions
@@ -1232,10 +1255,11 @@ class MessageHandler {
     async procesarVoucher(from, mensaje, mediaUrl) {
         const session = stateManager.getSession(from);
         let pedidoId = session.data?.pedidoId;
+        const businessId = session.businessId;
 
         // Si no hay pedidoId en la sesión, buscar el último pedido pendiente
-        if (!pedidoId && session.businessId) {
-            const pedidos = await sheetsService.getOrdersByClient(session.businessId, from);
+        if (!pedidoId && businessId) {
+            const pedidos = await sheetsService.getOrdersByClient(businessId, from);
             const pedidoPendiente = pedidos.find(p =>
                 p.estado === 'PENDIENTE_PAGO' || p.estado === 'PENDIENTE_VALIDACION'
             );
@@ -1246,7 +1270,7 @@ class MessageHandler {
         }
 
         if (!pedidoId) {
-            return await this.mostrarMenuNegocio(from, session.businessId);
+            return await this.mostrarMenuNegocio(from, businessId);
         }
 
         if (!mediaUrl) {
@@ -1285,14 +1309,14 @@ class MessageHandler {
 
         // Actualizar pedido con el link de Drive
         await sheetsService.updateOrderStatus(
-            session.businessId,
+            businessId,
             pedidoId,
             'PENDIENTE_VALIDACION',
             uploadResult.directLink
         );
 
         // Obtener configuración del negocio para determinar opciones de envío
-        const config = await sheetsService.getBusinessConfig(session.businessId);
+        const config = await sheetsService.getBusinessConfig(businessId);
 
         // Verificar si tiene opciones de envío configuradas
         const tieneEnvio = config && (
@@ -1301,7 +1325,24 @@ class MessageHandler {
             config.recojo_tienda_activo === 'SI'
         );
 
-        if (tieneEnvio) {
+        // Obtener datos de envío guardados del cliente
+        const clienteEnvio = await sheetsService.getClientShippingPreferences(businessId, from);
+
+        if (tieneEnvio && clienteEnvio && clienteEnvio.tipoEnvio) {
+            // Si ya hay preferencias de envío guardadas, usarlas
+            stateManager.clearActivePedido(from);
+            stateManager.setStep(from, 'esperando_codigo');
+
+            let mensaje_respuesta = '✅ ¡Comprobante recibido!\n\n';
+            mensaje_respuesta += 'Pedido: ' + pedidoId + '\n\n';
+            mensaje_respuesta += 'Estamos verificando tu pago.\n';
+            mensaje_respuesta += 'Te notificaremos cuando sea confirmado.\n\n';
+            mensaje_respuesta += `Tu pedido será enviado vía ${clienteEnvio.tipoEnvio} a ${clienteEnvio.ciudad || clienteEnvio.departamento}.\n\n`;
+            mensaje_respuesta += '¡Gracias por tu compra! 🎉';
+
+            return await whatsappService.sendMessage(from, mensaje_respuesta);
+
+        } else if (tieneEnvio) {
             // Preguntar ciudad para determinar tipo de envío
             stateManager.setStep(from, 'preguntar_ciudad', {
                 ...session.data,
@@ -1435,7 +1476,7 @@ class MessageHandler {
         const pedidoId = sessionData.pedidoId;
         const departamentoCliente = sessionData.departamentoCliente; // Get customer's department from session
 
-        // Guardar datos del cliente (ciudad/departamento)
+        // Guardar datos del cliente
         if (sessionData.ciudadCliente || departamentoCliente) {
             await sheetsService.saveClient(businessId, {
                 whatsapp: from,
@@ -1448,6 +1489,16 @@ class MessageHandler {
             // Envío local - Finalizar
             const costoEnvio = parseFloat(config.envio_local_costo || 0);
             const departamento = config.departamento || 'Lima'; // Business's department
+
+            // Guardar preferencia LOCAL
+            await sheetsService.updateClientShippingPreferences(businessId, from, {
+                ciudad: sessionData.ciudadCliente,
+                departamento: sessionData.departamentoCliente,
+                tipoEnvio: 'LOCAL',
+                empresa: null,
+                sede: null,
+                sedeDireccion: null
+            });
 
 
             await sheetsService.updateOrderShipping(businessId, pedidoId, {
@@ -1474,6 +1525,16 @@ class MessageHandler {
                 tipo_envio: 'RECOJO',
                 metodo_envio: 'Recojo en tienda',
                 costo_envio: 0
+            });
+
+            // Guardar preferencia RECOJO
+            await sheetsService.updateClientShippingPreferences(businessId, from, {
+                ciudad: sessionData.ciudadCliente,
+                departamento: sessionData.departamentoCliente,
+                tipoEnvio: 'RECOJO',
+                empresa: null,
+                sede: null,
+                sedeDireccion: config.direccion_tienda
             });
 
             return await this.enviarConfirmacionFinal(from, config, {
@@ -1635,7 +1696,18 @@ class MessageHandler {
             sede_direccion: `${sedeSeleccionada.direccion}, ${sedeSeleccionada.distrito}`,
             sede_departamento: sedeSeleccionada.departamento,
             sede_telefono: sedeSeleccionada.telefono || '',
+            sede_telefono: sedeSeleccionada.telefono || '',
             costo_envio: parseFloat(config.envio_nacional_costo || 0)
+        });
+
+        // Guardar preferencias de envío del cliente para futuros pedidos
+        await sheetsService.updateClientShippingPreferences(businessId, from, {
+            ciudad: sessionData.ciudadCliente,
+            departamento: sessionData.departamentoCliente,
+            tipoEnvio: 'NACIONAL',
+            empresa: empresaNombre,
+            sede: sedeSeleccionada.sede,
+            sedeDireccion: `${sedeSeleccionada.direccion}, ${sedeSeleccionada.distrito}`
         });
 
         // Enviar confirmación final
