@@ -776,11 +776,16 @@ class MessageHandler {
 
         } else if (pedido.estado === 'PENDIENTE_VALIDACION') {
             mensaje += '⏳ Tu voucher esta siendo validado. Te notificaremos pronto.';
+
+            stateManager.setStep(from, 'esperando_voucher', { pedidoId: pedido.id });
+
+            return await whatsappService.sendButtonMessage(from, mensaje, [
+                { title: 'Enviar comprobante', id: 'enviar_voucher' }
+            ]);
         } else {
             mensaje += 'Gracias por tu compra! 🎉';
+            return await whatsappService.sendMessage(from, mensaje);
         }
-
-        return await whatsappService.sendMessage(from, mensaje);
     }
 
     async procesarMenuNegocio(from, mensaje) {
