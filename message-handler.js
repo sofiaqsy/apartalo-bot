@@ -813,10 +813,10 @@ class MessageHandler {
         // (el cliente seleccionará después de enviar el voucher)
 
         if (pedido.estado === 'PENDIENTE_PAGO') {
-            mensaje += '💳 MÉTODOS DE PAGO:\n\n';
+            mensaje += 'METODOS DE PAGO:\n\n';
 
-            // Mostrar métodos de pago desde sheetsService helper
-            const metodos = sheetsService.getMetodosPago(config);
+            // Mostrar métodos de pago desde configuración del negocio
+            const metodos = sheetsService.getMetodosPago(businessConfig);
 
             if (metodos.length > 0) {
                 for (const metodo of metodos) {
