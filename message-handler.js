@@ -744,6 +744,7 @@ class MessageHandler {
 
     async mostrarDetallePedido(from, businessId, pedido) {
         const negocio = sheetsService.getBusiness(businessId);
+        const businessConfig = await sheetsService.getBusinessConfig(businessId);
 
         let mensaje = '📦 DETALLE DEL PEDIDO\n';
         mensaje += (negocio.nombre || '') + '\n\n';
@@ -767,8 +768,29 @@ class MessageHandler {
 
         mensaje += '\nTotal: S/' + pedido.total.toFixed(2) + '\n\n';
 
-        if (pedido.direccion) {
+        // Mostrar información de envío según configuración del negocio
+        const envioLocalActivo = businessConfig?.envio_local_activo?.toUpperCase() === 'SI';
+        const envioNacionalActivo = businessConfig?.envio_nacional_activo?.toUpperCase() === 'SI';
+
+        if (envioLocalActivo && pedido.direccion) {
+            // Envío local activo: mostrar dirección de entrega
             mensaje += 'Entrega en:\n' + pedido.direccion + '\n\n';
+        } else if (envioNacionalActivo && (pedido.tipoEnvio === 'NACIONAL' || pedido.ciudad || pedido.metodoEnvio)) {
+            // Envío nacional activo: mostrar ciudad, empresa y sede
+            mensaje += 'Envío a:\n';
+            if (pedido.ciudad || pedido.departamento) {
+                mensaje += (pedido.ciudad || '') + (pedido.departamento ? ', ' + pedido.departamento : '') + '\n';
+            }
+            if (pedido.metodoEnvio) {
+                mensaje += 'Empresa: ' + pedido.metodoEnvio + '\n';
+            }
+            if (pedido.detalleEnvio) {
+                mensaje += 'Sede: ' + pedido.detalleEnvio + '\n';
+            }
+            if (pedido.costoEnvio && pedido.costoEnvio > 0) {
+                mensaje += 'Costo envío: S/' + pedido.costoEnvio.toFixed(2) + '\n';
+            }
+            mensaje += '\n';
         }
 
         if (pedido.estado === 'PENDIENTE_PAGO') {
