@@ -1371,49 +1371,61 @@ class MessageHandler {
             config.recojo_tienda_activo === 'SI'
         );
 
-        // Obtener datos de envío guardados del cliente
-        const clienteEnvio = await sheetsService.getClientShippingPreferences(businessId, from);
+        // Obtener datos de envío del ÚLTIMO PEDIDO del cliente
+        const pedidosCliente = await sheetsService.getOrdersByClient(businessId, from);
+        const ultimoPedidoConEnvio = pedidosCliente.find(p => 
+            p.id !== pedidoId && p.tipoEnvio && p.tipoEnvio !== ''
+        );
         
-        console.log('=== DEBUG PREFERENCIAS ENVIO ===');
-        console.log('tieneEnvio:', tieneEnvio);
-        console.log('clienteEnvio:', JSON.stringify(clienteEnvio, null, 2));
-        console.log('================================');
+        console.log('=== DEBUG ULTIMO PEDIDO CON ENVIO ===');
+        console.log('tieneEnvio config:', tieneEnvio);
+        console.log('ultimoPedidoConEnvio:', ultimoPedidoConEnvio ? {
+            id: ultimoPedidoConEnvio.id,
+            tipoEnvio: ultimoPedidoConEnvio.tipoEnvio,
+            metodoEnvio: ultimoPedidoConEnvio.metodoEnvio,
+            detalleEnvio: ultimoPedidoConEnvio.detalleEnvio,
+            departamento: ultimoPedidoConEnvio.departamento,
+            ciudad: ultimoPedidoConEnvio.ciudad
+        } : null);
+        console.log('=====================================');
 
-        if (tieneEnvio && clienteEnvio && clienteEnvio.tipoEnvio) {
-            // Cliente tiene datos guardados - APLICAR AUTOMÁTICAMENTE
-            console.log('Aplicando datos de envío guardados automáticamente...');
+        if (tieneEnvio && ultimoPedidoConEnvio && ultimoPedidoConEnvio.tipoEnvio) {
+            // Cliente tiene datos de envío en su último pedido - APLICAR AUTOMÁTICAMENTE
+            console.log('Aplicando datos de envío del último pedido automáticamente...');
             
-            // Preparar datos para actualizar el pedido
+            // Preparar datos para actualizar el pedido actual
             const updateData = {
-                ciudad_cliente: clienteEnvio.ciudad || '',
-                departamento_cliente: clienteEnvio.departamento || '',
-                tipo_envio: clienteEnvio.tipoEnvio,
-                metodo_envio: '',
-                costo_envio: 0
+                ciudad_cliente: ultimoPedidoConEnvio.ciudad || '',
+                departamento_cliente: ultimoPedidoConEnvio.departamento || '',
+                tipo_envio: ultimoPedidoConEnvio.tipoEnvio,
+                metodo_envio: ultimoPedidoConEnvio.metodoEnvio || '',
+                costo_envio: ultimoPedidoConEnvio.costoEnvio || 0
             };
 
+            // Si es envío nacional, copiar también los detalles de la sede
+            if (ultimoPedidoConEnvio.tipoEnvio === 'NACIONAL') {
+                updateData.empresa_envio = ultimoPedidoConEnvio.metodoEnvio ? ultimoPedidoConEnvio.metodoEnvio.split(' - ')[0] : '';
+                updateData.sede_envio = ultimoPedidoConEnvio.metodoEnvio ? ultimoPedidoConEnvio.metodoEnvio.split(' - ')[1] : '';
+                updateData.sede_direccion = ultimoPedidoConEnvio.detalleEnvio || '';
+            }
+
+            // Construir mensaje de envío
             let mensajeEnvio = '';
-
-            if (clienteEnvio.tipoEnvio === 'LOCAL') {
-                updateData.metodo_envio = `Delivery ${clienteEnvio.departamento}`;
-                updateData.costo_envio = parseFloat(config.envio_local_costo || 0);
-                mensajeEnvio = `Delivery ${clienteEnvio.departamento}`;
-                if (updateData.costo_envio > 0) {
-                    mensajeEnvio += ` - S/${updateData.costo_envio.toFixed(2)}`;
+            if (ultimoPedidoConEnvio.tipoEnvio === 'LOCAL') {
+                mensajeEnvio = ultimoPedidoConEnvio.metodoEnvio || `Delivery ${ultimoPedidoConEnvio.departamento}`;
+                if (ultimoPedidoConEnvio.costoEnvio > 0) {
+                    mensajeEnvio += ` - S/${ultimoPedidoConEnvio.costoEnvio.toFixed(2)}`;
                 }
-
-            } else if (clienteEnvio.tipoEnvio === 'RECOJO') {
-                updateData.metodo_envio = 'Recojo en tienda';
-                updateData.costo_envio = 0;
-                mensajeEnvio = `Recojo en tienda\n${config.direccion_tienda || 'Tienda'}`;
-
-            } else if (clienteEnvio.tipoEnvio === 'NACIONAL') {
-                updateData.metodo_envio = `${clienteEnvio.empresa} - ${clienteEnvio.sede}`;
-                updateData.empresa_envio = clienteEnvio.empresa;
-                updateData.sede_envio = clienteEnvio.sede;
-                updateData.sede_direccion = clienteEnvio.sedeDireccion;
-                updateData.costo_envio = parseFloat(config.envio_nacional_costo || 0);
-                mensajeEnvio = `${clienteEnvio.empresa} - ${clienteEnvio.sede}\n${clienteEnvio.sedeDireccion || ''}`;
+            } else if (ultimoPedidoConEnvio.tipoEnvio === 'RECOJO') {
+                mensajeEnvio = 'Recojo en tienda';
+                if (config.direccion_tienda) {
+                    mensajeEnvio += `\n${config.direccion_tienda}`;
+                }
+            } else if (ultimoPedidoConEnvio.tipoEnvio === 'NACIONAL') {
+                mensajeEnvio = ultimoPedidoConEnvio.metodoEnvio || 'Courier';
+                if (ultimoPedidoConEnvio.detalleEnvio) {
+                    mensajeEnvio += `\n${ultimoPedidoConEnvio.detalleEnvio}`;
+                }
             }
 
             // Actualizar pedido con datos de envío
