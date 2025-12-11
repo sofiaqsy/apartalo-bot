@@ -3,7 +3,7 @@
  */
 
 /**
- * Construir link de WhatsApp con mensaje pre-armado de consulta
+ * Construir link de WhatsApp con mensaje pre-armado de consulta (corto)
  * @param {string} telefono - Número de teléfono del negocio
  * @param {Object} pedidoData - Datos del pedido
  * @returns {string} - Link de WhatsApp
@@ -17,19 +17,8 @@ function construirLinkWhatsAppConsulta(telefono, pedidoData) {
         numeroLimpio = '51' + numeroLimpio;
     }
 
-    // Construir mensaje de consulta con resumen
-    const precio = typeof pedidoData.precio === 'number'
-        ? pedidoData.precio.toFixed(2)
-        : pedidoData.precio;
-
-    const mensaje = `Hola, tengo una consulta sobre mi pedido:
-
-Pedido: ${pedidoData.pedidoId || 'N/A'}
-Producto: ${pedidoData.productoNombre || 'N/A'}
-Precio: S/${precio}
-Cliente: ${pedidoData.cliente || 'N/A'}
-
-Mi consulta es:`;
+    // Mensaje corto
+    const mensaje = `Hola, consulta pedido ${pedidoData.pedidoId || 'N/A'}`;
 
     // Codificar mensaje para URL
     const mensajeCodificado = encodeURIComponent(mensaje);

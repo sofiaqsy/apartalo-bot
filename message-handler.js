@@ -458,14 +458,19 @@ class MessageHandler {
             const config = await sheetsService.getBusinessConfig(businessId);
 
             // Construir mensaje de éxito
-            let mensajeRespuesta = '¡LO APARTASTE!\n\n';
+            let mensajeRespuesta = 'LO APARTASTE!\n\n';
             mensajeRespuesta += negocio.nombre + '\n\n';
             mensajeRespuesta += producto.nombre + '\n';
             mensajeRespuesta += 'S/' + producto.precio.toFixed(2) + '\n';
             mensajeRespuesta += 'Pedido: ' + pedidoId + '\n\n';
-            mensajeRespuesta += 'Datos de entrega:\n';
-            mensajeRespuesta += cliente.nombre + '\n';
-            mensajeRespuesta += cliente.direccion + '\n\n';
+            
+            // Solo mostrar datos de entrega si NO tiene envío nacional activo
+            const envioNacionalActivo = config?.envio_nacional_activo?.toUpperCase() === 'SI';
+            if (!envioNacionalActivo) {
+                mensajeRespuesta += 'Datos de entrega:\n';
+                mensajeRespuesta += cliente.nombre + '\n';
+                mensajeRespuesta += cliente.direccion + '\n\n';
+            }
 
             // Métodos de pago desde configuración del negocio
             if (config) {
@@ -487,18 +492,13 @@ class MessageHandler {
             }
 
             mensajeRespuesta += 'Tienes 30 minutos para completar el pago.\n';
-            mensajeRespuesta += 'Envía tu comprobante de pago a este chat.';
+            mensajeRespuesta += 'Envia tu comprobante de pago a este chat.';
 
-            // Link de WhatsApp con resumen del pedido
+            // Link de WhatsApp para consultas (corto)
             if (config && (config.whatsapp_negocio || config.telefono_contacto)) {
                 const telefonoNegocio = config.whatsapp_negocio || config.telefono_contacto;
-                const linkConsulta = construirLinkWhatsAppConsulta(telefonoNegocio, {
-                    pedidoId: pedidoId,
-                    productoNombre: producto.nombre,
-                    precio: producto.precio,
-                    cliente: cliente.nombre
-                });
-                mensajeRespuesta += '\n\n¿Consultas? Escribe aquí:\n' + linkConsulta;
+                const linkConsulta = construirLinkWhatsAppConsulta(telefonoNegocio, { pedidoId: pedidoId });
+                mensajeRespuesta += '\n\nConsultas: ' + linkConsulta;
             }
 
             stateManager.setStep(from, 'esperando_voucher', {
@@ -1874,25 +1874,14 @@ class MessageHandler {
             mensaje += '\nTe enviaremos el código de rastreo cuando despachemos.\n';
         }
 
-        mensaje += '\n━━━━━━━━━━━━━━━━━━━━\n';
+        mensaje += '\n';
 
         if (config && (config.whatsapp_negocio || config.telefono_contacto)) {
             const telefonoConsulta = config.whatsapp_negocio || config.telefono_contacto;
-
-            // Datos para el link de consulta
-            const datosPedido = {
-                pedidoId: sessionData.pedidoId,
-                productoNombre: sessionData.productoApartado ? sessionData.productoApartado.nombre : 'mi pedido',
-                precio: sessionData.productoApartado ? sessionData.productoApartado.precio : 0,
-                cliente: sessionData.nombre || 'Cliente'
-            };
-
-            const linkConsulta = construirLinkWhatsAppConsulta(telefonoConsulta, datosPedido);
-
-            mensaje += '¿Consultas sobre tu pedido? 🤔\n';
-            mensaje += `👉 ${linkConsulta}`;
+            const linkConsulta = construirLinkWhatsAppConsulta(telefonoConsulta, { pedidoId: sessionData.pedidoId });
+            mensaje += 'Consultas: ' + linkConsulta;
         } else {
-            mensaje += '¡Gracias por tu compra! 🎉';
+            mensaje += 'Gracias por tu compra!';
         }
 
         // Limpiar estado
