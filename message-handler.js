@@ -746,6 +746,20 @@ class MessageHandler {
         const negocio = sheetsService.getBusiness(businessId);
         const businessConfig = await sheetsService.getBusinessConfig(businessId);
 
+        // DEBUG: Verificar configuración y datos del pedido
+        console.log('=== DEBUG mostrarDetallePedido ===');
+        console.log('businessConfig:', JSON.stringify(businessConfig, null, 2));
+        console.log('envio_local_activo:', businessConfig?.envio_local_activo);
+        console.log('envio_nacional_activo:', businessConfig?.envio_nacional_activo);
+        console.log('pedido.direccion:', pedido.direccion);
+        console.log('pedido.tipoEnvio:', pedido.tipoEnvio);
+        console.log('pedido.ciudad:', pedido.ciudad);
+        console.log('pedido.departamento:', pedido.departamento);
+        console.log('pedido.metodoEnvio:', pedido.metodoEnvio);
+        console.log('pedido.detalleEnvio:', pedido.detalleEnvio);
+        console.log('pedido.costoEnvio:', pedido.costoEnvio);
+        console.log('=================================');
+
         let mensaje = '📦 DETALLE DEL PEDIDO\n';
         mensaje += (negocio.nombre || '') + '\n\n';
         mensaje += 'Codigo: ' + pedido.id + '\n';
