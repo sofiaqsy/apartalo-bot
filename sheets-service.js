@@ -1382,34 +1382,6 @@ class SheetsService {
         }
     }
 
-    /**
-     * Parsear métodos de pago
-     */
-    getMetodosPago(config) {
-        const metodos = [];
-        if (!config || !config.cuentasBancarias) return metodos;
-
-        const cuentas = config.cuentasBancarias.split('|');
-        cuentas.forEach(cuenta => {
-            // Formato esperado: "Banco:Numero" o "Yape:Numero"
-            // Pero mejor si es más flexible. Asumimos texto simple por ahora
-            const parts = cuenta.split(':');
-            if (parts.length >= 2) {
-                const tipo = parts[0].trim().toLowerCase();
-                const isWallet = tipo.includes('yape') || tipo.includes('plin');
-
-                metodos.push({
-                    tipo: isWallet ? 'yape' : 'banco',
-                    nombre: parts[0].trim(),
-                    numero: parts[1].trim(), // Para wallets
-                    cuenta: parts[1].trim(), // Para bancos
-                    titular: '', // No tenemos titular separado en el formato actual simple
-                    cci: ''
-                });
-            }
-        });
-        return metodos;
-    }
 }
 
 module.exports = new SheetsService();

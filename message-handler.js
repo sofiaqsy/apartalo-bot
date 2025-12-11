@@ -817,6 +817,11 @@ class MessageHandler {
 
             // Mostrar métodos de pago desde configuración del negocio
             const metodos = sheetsService.getMetodosPago(businessConfig);
+            
+            // DEBUG: Ver metodos de pago
+            console.log('=== DEBUG METODOS DE PAGO ===');
+            console.log('metodos:', JSON.stringify(metodos, null, 2));
+            console.log('=============================');
 
             if (metodos.length > 0) {
                 for (const metodo of metodos) {
