@@ -786,11 +786,11 @@ class MessageHandler {
         const envioLocalActivo = businessConfig?.envio_local_activo?.toUpperCase() === 'SI';
         const envioNacionalActivo = businessConfig?.envio_nacional_activo?.toUpperCase() === 'SI';
 
-        if (envioLocalActivo && pedido.direccion) {
-            // Envío local activo: mostrar dirección de entrega
-            mensaje += 'Entrega en:\n' + pedido.direccion + '\n\n';
-        } else if (envioNacionalActivo && (pedido.tipoEnvio === 'NACIONAL' || pedido.ciudad || pedido.metodoEnvio)) {
-            // Envío nacional activo: mostrar ciudad, empresa y sede
+        // Verificar si el pedido tiene datos de envío nacional completos
+        const tieneEnvioNacional = pedido.tipoEnvio === 'NACIONAL' || pedido.metodoEnvio || pedido.detalleEnvio;
+
+        if (envioNacionalActivo && tieneEnvioNacional) {
+            // Envío nacional: mostrar ciudad, empresa y sede
             mensaje += 'Envío a:\n';
             if (pedido.ciudad || pedido.departamento) {
                 mensaje += (pedido.ciudad || '') + (pedido.departamento ? ', ' + pedido.departamento : '') + '\n';
@@ -805,7 +805,12 @@ class MessageHandler {
                 mensaje += 'Costo envío: S/' + pedido.costoEnvio.toFixed(2) + '\n';
             }
             mensaje += '\n';
+        } else if (envioLocalActivo && pedido.direccion) {
+            // Envío local activo: mostrar dirección de entrega
+            mensaje += 'Entrega en:\n' + pedido.direccion + '\n\n';
         }
+        // Si envío nacional activo pero aún no tiene datos de envío, no mostrar nada
+        // (el cliente seleccionará después de enviar el voucher)
 
         if (pedido.estado === 'PENDIENTE_PAGO') {
             mensaje += '💳 MÉTODOS DE PAGO:\n\n';
