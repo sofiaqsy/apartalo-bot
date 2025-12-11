@@ -309,7 +309,7 @@ class MessageHandler {
             return await this.confirmarEnvioGuardado(from);
         }
 
-        if (buttonId === 'confirmar_envio_no') {
+        if (buttonId === 'confirmar_envio_no' || buttonId === 'cambiar_envio') {
             return await this.cambiarDatosEnvio(from);
         }
 
@@ -1373,33 +1373,69 @@ class MessageHandler {
 
         // Obtener datos de envío guardados del cliente
         const clienteEnvio = await sheetsService.getClientShippingPreferences(businessId, from);
+        
+        console.log('=== DEBUG PREFERENCIAS ENVIO ===');
+        console.log('tieneEnvio:', tieneEnvio);
+        console.log('clienteEnvio:', JSON.stringify(clienteEnvio, null, 2));
+        console.log('================================');
 
         if (tieneEnvio && clienteEnvio && clienteEnvio.tipoEnvio) {
-            // Cliente tiene datos guardados - pedir confirmación
-            stateManager.setData(from, 'preferenciasEnvio', clienteEnvio);
-            stateManager.setStep(from, 'confirmar_envio', { ...session.data, pedidoId });
+            // Cliente tiene datos guardados - APLICAR AUTOMÁTICAMENTE
+            console.log('Aplicando datos de envío guardados automáticamente...');
+            
+            // Preparar datos para actualizar el pedido
+            const updateData = {
+                ciudad_cliente: clienteEnvio.ciudad || '',
+                departamento_cliente: clienteEnvio.departamento || '',
+                tipo_envio: clienteEnvio.tipoEnvio,
+                metodo_envio: '',
+                costo_envio: 0
+            };
 
-            let mensaje = '✅ ¡Comprobante recibido!\n';
-            mensaje += 'Estamos verificando tu pago.\n\n';
-            mensaje += '📦 Tus datos de envío guardados:\n\n';
+            let mensajeEnvio = '';
 
             if (clienteEnvio.tipoEnvio === 'LOCAL') {
-                mensaje += `Tipo: Delivery ${clienteEnvio.departamento}\n`;
-                mensaje += `Ciudad: ${clienteEnvio.ciudad}\n`;
+                updateData.metodo_envio = `Delivery ${clienteEnvio.departamento}`;
+                updateData.costo_envio = parseFloat(config.envio_local_costo || 0);
+                mensajeEnvio = `Delivery ${clienteEnvio.departamento}`;
+                if (updateData.costo_envio > 0) {
+                    mensajeEnvio += ` - S/${updateData.costo_envio.toFixed(2)}`;
+                }
+
             } else if (clienteEnvio.tipoEnvio === 'RECOJO') {
-                mensaje += 'Tipo: Recojo en tienda\n';
-                mensaje += `Dirección: ${config.direccion_tienda || 'Tienda'}\n`;
+                updateData.metodo_envio = 'Recojo en tienda';
+                updateData.costo_envio = 0;
+                mensajeEnvio = `Recojo en tienda\n${config.direccion_tienda || 'Tienda'}`;
+
             } else if (clienteEnvio.tipoEnvio === 'NACIONAL') {
-                mensaje += 'Tipo: Envío por courier\n';
-                mensaje += `Empresa: ${clienteEnvio.empresa}\n`;
-                mensaje += `Sede: ${clienteEnvio.sede}\n`;
+                updateData.metodo_envio = `${clienteEnvio.empresa} - ${clienteEnvio.sede}`;
+                updateData.empresa_envio = clienteEnvio.empresa;
+                updateData.sede_envio = clienteEnvio.sede;
+                updateData.sede_direccion = clienteEnvio.sedeDireccion;
+                updateData.costo_envio = parseFloat(config.envio_nacional_costo || 0);
+                mensajeEnvio = `${clienteEnvio.empresa} - ${clienteEnvio.sede}\n${clienteEnvio.sedeDireccion || ''}`;
             }
 
-            mensaje += '\n¿Enviamos a esta dirección?';
+            // Actualizar pedido con datos de envío
+            await sheetsService.updateOrderShipping(businessId, pedidoId, updateData);
+            console.log('Datos de envío actualizados en pedido:', pedidoId);
+
+            // Limpiar estado
+            stateManager.clearState(from);
+
+            let mensaje = 'Comprobante recibido!\n';
+            mensaje += 'Estamos verificando tu pago.\n\n';
+            mensaje += `Codigo: ${pedidoId}\n\n`;
+            mensaje += 'Envio:\n';
+            mensaje += mensajeEnvio + '\n\n';
+            mensaje += 'Te notificaremos cuando tu pedido sea despachado.';
+
+            if (config.telefono_contacto) {
+                mensaje += `\n\nConsultas? ${config.telefono_contacto}`;
+            }
 
             return await whatsappService.sendButtonMessage(from, mensaje, [
-                { id: 'confirmar_envio_si', title: 'Sí, confirmar' },
-                { id: 'confirmar_envio_no', title: 'Cambiar datos' }
+                { id: 'cambiar_envio', title: 'Cambiar envio' }
             ]);
 
         } else if (tieneEnvio) {
@@ -1913,10 +1949,24 @@ class MessageHandler {
     }
 
     async cambiarDatosEnvio(from) {
-        const sessionData = stateManager.getData(from);
+        const session = stateManager.getSession(from);
+        const sessionData = session.data || {};
+        const businessId = session.businessId || stateManager.getActiveBusiness(from);
+        
+        // Obtener el pedido más reciente si no hay pedidoId en sesión
+        let pedidoId = sessionData.pedidoId;
+        if (!pedidoId && businessId) {
+            const pedidos = await sheetsService.getOrdersByClient(businessId, from);
+            const pedidoReciente = pedidos.find(p => 
+                p.estado === 'PENDIENTE_VALIDACION' || p.estado === 'PENDIENTE_PAGO'
+            );
+            if (pedidoReciente) {
+                pedidoId = pedidoReciente.id;
+            }
+        }
 
-        // Iniciar flujo normal de selección de envío
-        stateManager.setStep(from, 'preguntar_ciudad', sessionData);
+        // Iniciar flujo normal de selección de envío con pedidoId
+        stateManager.setStep(from, 'preguntar_ciudad', { ...sessionData, pedidoId });
 
         return await whatsappService.sendMessage(from,
             'Entendido, vamos a usar otros datos de envío.\n\n' +
